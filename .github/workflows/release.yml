@@ -110,16 +110,17 @@ jobs:
       - name: Wait for tap to carry the new tag
         env:
           TAG: ${{ needs.release.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # bump-personal-dashboard runs in homebrew-tap and PUTs the
-        # Formula via Contents API. Poll the raw file until the url line
-        # carries the new tag, capped at ~3 minutes. Without this, the
-        # subsequent brew upgrade on kai-server would still see the old
-        # tarball.
+        # Formula via Contents API. Poll the Contents API (not the raw
+        # CDN, which caches aggressively for 5+ min) until the file
+        # carries the new tag. Capped at ~3 min.
         run: |
           set -euo pipefail
-          formula="https://raw.githubusercontent.com/coilysiren/homebrew-tap/main/Formula/personal-dashboard.rb"
+          path=Formula/personal-dashboard.rb
           for i in $(seq 1 18); do
-            if curl -fsSL "$formula" | grep -q "/${TAG}.tar.gz\""; then
+            content=$(gh api "repos/coilysiren/homebrew-tap/contents/${path}" --jq .content | base64 -d || true)
+            if grep -q "/${TAG}.tar.gz\"" <<< "$content"; then
               echo "tap carries $TAG"
               exit 0
             fi
