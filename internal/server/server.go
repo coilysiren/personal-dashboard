@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coilysiren/personal-dashboard/internal/dispatcher"
 	"github.com/coilysiren/personal-dashboard/internal/session"
 	"github.com/coilysiren/personal-dashboard/internal/sources/bluesky"
 	"github.com/coilysiren/personal-dashboard/internal/sources/coilyaudit"
@@ -35,6 +36,7 @@ var pageTemplates = map[string]string{
 	"steam":         "templates/panels/steam.html.tmpl",
 	"luca-o2r":      "templates/panels/luca-o2r.html.tmpl",
 	"social":        "templates/panels/social.html.tmpl",
+	"home":          "templates/panels/home.html.tmpl",
 }
 
 //go:embed static
@@ -56,6 +58,7 @@ type Server struct {
 	o2r        *o2r.Source
 	bluesky    *bluesky.Client
 	reddit     *reddit.Client
+	dispatcher dispatcher.Dispatcher
 }
 
 // PageData is the template payload every route renders against.
@@ -144,6 +147,7 @@ func New(logger *slog.Logger, cfg Config) *Server {
 		o2r:        o2rSrc,
 		bluesky:    bs,
 		reddit:     rd,
+		dispatcher: dispatcher.DeepLink{},
 	}
 }
 
@@ -182,6 +186,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /panels/steam", s.handleSteam)
 	mux.HandleFunc("GET /panels/luca-o2r", s.handleLucaO2R)
 	mux.HandleFunc("GET /panels/social", s.handleSocial)
+	mux.HandleFunc("GET /panels/home", s.handleHome)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -515,6 +520,109 @@ func (s *Server) handleSocial(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.render(w, "social", data)
+}
+
+type homeAction struct {
+	Label string
+	// URL is template.URL so html/template doesn't mangle the
+	// coily:// scheme into the #ZgotmplZ safety placeholder.
+	URL    template.URL
+	Accent bool
+}
+
+type homeCard struct {
+	Title   string
+	Note    string
+	Actions []homeAction
+}
+
+type homeData struct {
+	PageData
+	Panel struct {
+		Cards []homeCard
+	}
+}
+
+// homePresets is the static set of one-tap actions. Lives here rather
+// than in YAML so the dispatcher abstraction is exercised at panel-
+// render time; if the dispatcher backend swaps from DeepLink to the
+// coily web-ops MCP later, every URL here moves with it.
+var homePresets = []struct {
+	Title, Note string
+	Actions     []struct {
+		Label, Verb string
+		Args        map[string]string
+		Accent      bool
+	}
+}{
+	{
+		Title: "lights (hue)",
+		Note:  "presets via openhue scenes.",
+		Actions: []struct {
+			Label, Verb string
+			Args        map[string]string
+			Accent      bool
+		}{
+			{Label: "bright", Verb: "hue.scene", Args: map[string]string{"name": "bright"}, Accent: true},
+			{Label: "movie", Verb: "hue.scene", Args: map[string]string{"name": "movie"}},
+			{Label: "dim", Verb: "hue.scene", Args: map[string]string{"name": "dim"}},
+			{Label: "off", Verb: "hue.off", Args: nil},
+		},
+	},
+	{
+		Title: "speakers (sonos desk double)",
+		Note:  "transport + volume.",
+		Actions: []struct {
+			Label, Verb string
+			Args        map[string]string
+			Accent      bool
+		}{
+			{Label: "play", Verb: "sonos.play", Args: nil, Accent: true},
+			{Label: "pause", Verb: "sonos.pause", Args: nil},
+			{Label: "vol -", Verb: "sonos.volume.down", Args: nil},
+			{Label: "vol +", Verb: "sonos.volume.up", Args: nil},
+		},
+	},
+	{
+		Title: "cast hubs",
+		Note:  "kai's desk + bathroom.",
+		Actions: []struct {
+			Label, Verb string
+			Args        map[string]string
+			Accent      bool
+		}{
+			{Label: "desk: clock", Verb: "cast.show", Args: map[string]string{"target": "desk", "scene": "clock"}},
+			{Label: "bathroom: clock", Verb: "cast.show", Args: map[string]string{"target": "bathroom", "scene": "clock"}},
+			{Label: "both: stop", Verb: "cast.stop", Args: map[string]string{"target": "group"}},
+		},
+	},
+}
+
+func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
+	const route = "/panels/home"
+	data := homeData{
+		PageData: PageData{
+			Route:    route,
+			Revealed: s.sessions.IsRevealed(sessionID(r), route),
+		},
+	}
+	for _, c := range homePresets {
+		card := homeCard{Title: c.Title, Note: c.Note}
+		for _, a := range c.Actions {
+			res, err := s.dispatcher.Dispatch(dispatcher.Action(a.Verb), a.Args)
+			if err != nil {
+				s.logger.Error("dispatch failed", "verb", a.Verb, "err", err)
+				continue
+			}
+			card.Actions = append(card.Actions, homeAction{
+				Label:  a.Label,
+				URL:    template.URL(res.URL),
+				Accent: a.Accent,
+			})
+		}
+		data.Panel.Cards = append(data.Panel.Cards, card)
+	}
+	s.render(w, "home", data)
 }
 
 // handleVoiceSay synthesizes audio for the "text" form value and streams

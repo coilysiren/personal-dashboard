@@ -1,0 +1,26 @@
+{{define "title"}}home - personal-dashboard{{end}}
+{{define "main"}}
+<header>
+  <h1>home control</h1>
+  <p class="muted">tap to fire. each action opens a <code>coily://</code> URL the local coily handles.</p>
+</header>
+
+{{range .Panel.Cards}}
+<section class="card">
+  <h2>{{.Title}}</h2>
+  <p class="muted">{{.Note}}</p>
+  <p class="row">
+    {{range .Actions}}
+      <a class="tap{{if .Accent}} accent{{end}}" href="{{.URL}}">{{.Label}}</a>
+    {{end}}
+  </p>
+</section>
+{{end}}
+
+<section class="card">
+  <h2>state readout</h2>
+  <p class="muted">live state of lights / speakers / hubs needs LAN reachability and Hue/Sonos/Cast credentials. Lands when the daemon runs on kai-server with the bridges visible.</p>
+</section>
+
+<p><a class="tap" href="/">back</a></p>
+{{end}}
