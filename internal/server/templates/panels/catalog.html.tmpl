@@ -19,32 +19,24 @@
   {{if .RepoErr}}
     <p class="muted">live overlay degraded: <code>{{.RepoErr}}</code>. graph still renders, badges absent.</p>
   {{end}}
-  <pre class="mermaid">graph LR
-{{range $sys := .Systems -}}
-  subgraph {{nodeID $sys}}["{{$sys}}"]
-{{range index $.Panel.Catalog.BySystem $sys -}}
-    {{nodeID .Name}}["{{.Name}}{{if .Live.HaveRow}}{{if .Live.OpenIssues}}<br/>📋 {{.Live.OpenIssues}}{{end}}{{if .Live.ActionRequired}} ⚠️{{end}}{{end}}"]
-{{end -}}
-  end
-{{end -}}
-{{range .Edges -}}
-{{if eq .Type "dependsOn"}}  {{nodeID (lastSeg .From)}} --> {{nodeID (lastSeg .To)}}
-{{end -}}
-{{end -}}
-{{range .Nodes -}}
-{{if .Live.HaveRow -}}
-{{if eq .Live.CIStatus "failure"}}  class {{nodeID .Name}} ciFail
-{{else if eq .Live.CIStatus "running"}}  class {{nodeID .Name}} ciRun
-{{else if eq .Live.CIStatus "success"}}  class {{nodeID .Name}} ciOk
-{{end -}}
-{{end -}}
-{{end -}}
-classDef ciOk stroke:#3a3,stroke-width:2px
-classDef ciFail stroke:#c33,stroke-width:3px
-classDef ciRun stroke:#fa3,stroke-width:2px,stroke-dasharray:4
-</pre>
-  <p class="muted">stroke green = CI success, red = failure, orange-dashed = running. badges: 📋 open issues, ⚠️ action_required.</p>
+  <div id="cy" class="cy-canvas" role="img" aria-label="cross-repo dependency graph"></div>
+  <p class="muted">drag to pan, pinch or scroll to zoom. tap a repo to open its detail below. border green = CI success, red = failure, orange-dashed = running.</p>
 </section>
+
+<style>
+  .cy-canvas {
+    width: 100%;
+    height: 70vh;
+    min-height: 380px;
+    background: #0f0f0f;
+    border-radius: 8px;
+    overflow: hidden;
+    touch-action: none;
+  }
+  @media (max-width: 720px) {
+    .cy-canvas { height: 60vh; }
+  }
+</style>
 
 <section class="card">
   <h2>systems</h2>
@@ -109,13 +101,159 @@ classDef ciRun stroke:#fa3,stroke-width:2px,stroke-dasharray:4
 <p><a class="tap" href="/">back</a></p>
 
 <script type="module">
-  // mermaid only loads when the panel renders. On narrow viewports the
-  // graph block is display:none via app.css so the script is wasted
-  // work; gate on viewport width.
-  if (window.matchMedia("(min-width: 720px)").matches) {
-    const m = await import("https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs");
-    m.default.initialize({ startOnLoad: false, theme: "dark", securityLevel: "loose" });
-    await m.default.run({ querySelector: "pre.mermaid" });
+  const cy = await import("https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.esm.min.js");
+  const fcoseModule = await import("https://cdn.jsdelivr.net/npm/cytoscape-fcose@2.2.0/+esm");
+  cy.default.use(fcoseModule.default);
+
+  const res = await fetch("/api/catalog", { cache: "no-store" });
+  const data = await res.json();
+
+  // Build elements: one compound parent per system, one child per node,
+  // one edge per dependsOn. Edges that point at a bare API name (no "/")
+  // are dropped from the visual, since they don't terminate at a node.
+  const elements = [];
+  const systems = new Set();
+  const nodeIDs = new Set();
+  for (const n of data.nodes || []) {
+    systems.add(n.system || "unsorted");
+    nodeIDs.add(n.id);
+    elements.push({
+      group: "nodes",
+      data: {
+        id: n.id,
+        label: n.name,
+        parent: "sys:" + (n.system || "unsorted"),
+        type: n.type || "",
+        lifecycle: n.lifecycle || "",
+        ci: (n.live && n.live.have_row) ? (n.live.ci_status || "") : "",
+        openIssues: (n.live && n.live.open_issues) || 0,
+        actionRequired: !!(n.live && n.live.action_required),
+        description: n.description || "",
+      },
+    });
   }
+  for (const s of systems) {
+    elements.push({ group: "nodes", data: { id: "sys:" + s, label: s, isSystem: true } });
+  }
+  for (const e of data.edges || []) {
+    if (e.type !== "dependsOn") continue;
+    if (!nodeIDs.has(e.to)) continue;
+    elements.push({ group: "edges", data: { source: e.from, target: e.to } });
+  }
+
+  const instance = cy.default({
+    container: document.getElementById("cy"),
+    elements,
+    wheelSensitivity: 0.2,
+    style: [
+      {
+        selector: "node",
+        style: {
+          "label": "data(label)",
+          "color": "#eaeaea",
+          "font-family": "ui-sans-serif, system-ui, sans-serif",
+          "font-size": "11px",
+          "text-valign": "center",
+          "text-halign": "center",
+          "background-color": "#1d4e89",
+          "border-color": "#2a6fbb",
+          "border-width": 1,
+          "shape": "round-rectangle",
+          "width": "label",
+          "height": 28,
+          "padding": "8px",
+          "text-wrap": "ellipsis",
+          "text-max-width": "140px",
+        },
+      },
+      {
+        selector: "node[?isSystem]",
+        style: {
+          "label": "data(label)",
+          "background-color": "rgba(255,255,255,0.03)",
+          "background-opacity": 1,
+          "border-color": "rgba(255,255,255,0.15)",
+          "border-width": 1,
+          "shape": "round-rectangle",
+          "color": "#9aa",
+          "font-size": "12px",
+          "font-weight": "bold",
+          "text-valign": "top",
+          "text-halign": "center",
+          "text-margin-y": -6,
+          "padding": "18px",
+        },
+      },
+      { selector: 'node[ci = "success"]', style: { "border-color": "#3a3", "border-width": 3 } },
+      { selector: 'node[ci = "failure"]', style: { "border-color": "#c33", "border-width": 4 } },
+      { selector: 'node[ci = "running"]', style: { "border-color": "#fa3", "border-width": 3, "border-style": "dashed" } },
+      { selector: 'node[?actionRequired]', style: { "background-color": "#8a5a1d" } },
+      {
+        selector: "edge",
+        style: {
+          "curve-style": "bezier",
+          "width": 1.4,
+          "line-color": "rgba(180,180,200,0.35)",
+          "target-arrow-color": "rgba(180,180,200,0.55)",
+          "target-arrow-shape": "triangle",
+          "arrow-scale": 0.9,
+        },
+      },
+      {
+        selector: ":selected",
+        style: {
+          "background-color": "#d8a32a",
+          "border-color": "#ffd76a",
+          "border-width": 4,
+          "color": "#fff",
+        },
+      },
+      {
+        selector: "edge.highlighted",
+        style: {
+          "line-color": "#ffd76a",
+          "target-arrow-color": "#ffd76a",
+          "width": 2.5,
+        },
+      },
+    ],
+    layout: {
+      name: "fcose",
+      animate: false,
+      nodeSeparation: 80,
+      idealEdgeLength: 90,
+      nodeRepulsion: 5500,
+      gravity: 0.2,
+      gravityRangeCompound: 1.5,
+      packComponents: true,
+      tile: true,
+    },
+  });
+
+  // Tap a repo node: highlight its edges, scroll its details<details> open
+  // in the systems section below so the rest of the panel becomes useful
+  // context for the node you picked.
+  instance.on("tap", "node", (evt) => {
+    const node = evt.target;
+    if (node.data("isSystem")) return;
+    instance.edges().removeClass("highlighted");
+    node.connectedEdges().addClass("highlighted");
+    const name = node.data("label");
+    const targets = document.querySelectorAll(".catalog-node-name");
+    for (const t of targets) {
+      if (t.textContent.trim() !== name) continue;
+      const det = t.closest("details.catalog-node");
+      if (!det) continue;
+      det.open = true;
+      det.scrollIntoView({ behavior: "smooth", block: "center" });
+      break;
+    }
+  });
+
+  instance.on("tap", (evt) => {
+    if (evt.target === instance) {
+      instance.edges().removeClass("highlighted");
+    }
+  });
 </script>
 {{end}}
