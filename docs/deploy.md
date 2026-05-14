@@ -7,7 +7,7 @@ onto Kai's tailnet via `tailscale serve`. Source-of-truth deploy lives in
 ## Topology
 
 * Daemon binds `127.0.0.1:31337`. No public bind. No laptop-localhost bind.
-* `tailscale serve` proxies it onto `https://kai-server.<tailnet>.ts.net:8443`.
+* `tailscale serve` proxies it onto `https://kai-server.tail09a41b.ts.net:8443`.
 * systemd unit, user `kai`, restart on failure, starts at boot.
 
 ## One-time install on kai-server
@@ -54,19 +54,25 @@ not commit the file.
 
 After the service is up, expose it via `tailscale serve`. Port 443 on
 kai-server is already taken by repo-recall, so personal-dashboard rides
-8443:
+8443.
+
+The tailscale-serve cert is issued for the full tailnet FQDN
+`kai-server.tail09a41b.ts.net`. The bare MagicDNS name `kai-server`
+resolves, but TLS handshake will fail on it with `tlsv1 alert internal
+error` because the cert SNI doesn't match. Always use the FQDN over
+HTTPS.
 
 ```bash
 sudo tailscale serve --bg --https=8443 http://127.0.0.1:31337
 tailscale serve status
 ```
 
-Final URL: `https://kai-server.<tailnet>.ts.net:8443`.
+Final URL: `https://kai-server.tail09a41b.ts.net:8443`.
 
 ## Verify
 
 * From Mac or phone on the tailnet:
-  `curl -sfI https://kai-server.<tailnet>.ts.net:8443/`
+  `curl -sfI https://kai-server.tail09a41b.ts.net:8443/`
 * From outside the tailnet (drop wifi, switch phone to LTE):
   the same curl must fail.
 * Reboot kai-server, confirm the service comes back:
