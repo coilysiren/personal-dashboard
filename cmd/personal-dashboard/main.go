@@ -34,6 +34,8 @@ func main() {
 		VictoriaMetricsURL: os.Getenv("VICTORIAMETRICS_URL"),
 		BlueskyHandle:     os.Getenv("BLUESKY_HANDLE"),
 		RedditInboxRSS:    os.Getenv("REDDIT_INBOX_RSS"),
+		CoilycoAIPath:     os.Getenv("PERSONAL_DASHBOARD_COILYCO_AI_PATH"),
+		RepoRecallURL:     os.Getenv("REPO_RECALL_URL"),
 	})
 
 	httpSrv := &http.Server{

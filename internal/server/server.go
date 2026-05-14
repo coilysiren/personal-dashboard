@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"html/template"
 	"io/fs"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"github.com/coilysiren/personal-dashboard/internal/dispatcher"
 	"github.com/coilysiren/personal-dashboard/internal/session"
 	"github.com/coilysiren/personal-dashboard/internal/sources/bluesky"
+	"github.com/coilysiren/personal-dashboard/internal/sources/catalog"
 	"github.com/coilysiren/personal-dashboard/internal/sources/coilyaudit"
 	"github.com/coilysiren/personal-dashboard/internal/sources/o2r"
 	"github.com/coilysiren/personal-dashboard/internal/sources/reddit"
@@ -37,6 +39,7 @@ var pageTemplates = map[string]string{
 	"luca-o2r":      "templates/panels/luca-o2r.html.tmpl",
 	"social":        "templates/panels/social.html.tmpl",
 	"home":          "templates/panels/home.html.tmpl",
+	"catalog":       "templates/panels/catalog.html.tmpl",
 }
 
 //go:embed static
@@ -58,6 +61,7 @@ type Server struct {
 	o2r        *o2r.Source
 	bluesky    *bluesky.Client
 	reddit     *reddit.Client
+	catalog    *catalog.Source
 	dispatcher dispatcher.Dispatcher
 }
 
@@ -85,13 +89,45 @@ type Config struct {
 	VictoriaMetricsURL string
 	BlueskyHandle     string
 	RedditInboxRSS    string
+	CoilycoAIPath     string
+	RepoRecallURL     string
+}
+
+// templateFuncs are the helpers every page template can use. Kept
+// small; non-trivial logic stays in Go.
+var templateFuncs = template.FuncMap{
+	// nodeID returns a mermaid/CSS-safe identifier from a name like
+	// "coily-platform" or "repo-recall" by replacing non-alphanumerics
+	// with underscore. Mermaid node IDs cannot contain hyphens or dots
+	// without quoting; underscores are always safe.
+	"nodeID": func(s string) string {
+		out := make([]byte, 0, len(s))
+		for i := 0; i < len(s); i++ {
+			c := s[i]
+			switch {
+			case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+				out = append(out, c)
+			default:
+				out = append(out, '_')
+			}
+		}
+		return string(out)
+	},
+	// lastSeg strips the owner prefix from a node id like
+	// "coilysiren/coily" -> "coily" for display.
+	"lastSeg": func(s string) string {
+		if i := strings.LastIndex(s, "/"); i >= 0 {
+			return s[i+1:]
+		}
+		return s
+	},
 }
 
 func New(logger *slog.Logger, cfg Config) *Server {
 	// Parse base.html.tmpl once, clone per page, then layer the page-
 	// specific template on top. This gives each page its own
 	// {{define "main"}} namespace so they cannot stomp on each other.
-	base := template.Must(template.ParseFS(templateFS, "templates/base.html.tmpl"))
+	base := template.Must(template.New("base").Funcs(templateFuncs).ParseFS(templateFS, "templates/base.html.tmpl"))
 	pages := make(map[string]*template.Template, len(pageTemplates))
 	for name, path := range pageTemplates {
 		t, err := base.Clone()
@@ -147,6 +183,7 @@ func New(logger *slog.Logger, cfg Config) *Server {
 		o2r:        o2rSrc,
 		bluesky:    bs,
 		reddit:     rd,
+		catalog:    catalog.New(cfg.CoilycoAIPath, cfg.RepoRecallURL),
 		dispatcher: dispatcher.DeepLink{},
 	}
 }
@@ -187,6 +224,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /panels/luca-o2r", s.handleLucaO2R)
 	mux.HandleFunc("GET /panels/social", s.handleSocial)
 	mux.HandleFunc("GET /panels/home", s.handleHome)
+	mux.HandleFunc("GET /panels/catalog", s.handleCatalog)
+	mux.HandleFunc("GET /api/catalog", s.handleCatalogJSON)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -650,6 +689,34 @@ func (s *Server) handleVoiceSay(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "audio/mpeg")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(audio)
+}
+
+type catalogData struct {
+	PageData
+	Panel struct {
+		Catalog catalog.Catalog
+	}
+}
+
+func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
+	const route = "/panels/catalog"
+	data := catalogData{
+		PageData: PageData{
+			Route:    route,
+			Revealed: s.sessions.IsRevealed(sessionID(r), route),
+		},
+	}
+	data.Panel.Catalog = s.catalog.Fetch(r.Context())
+	s.render(w, "catalog", data)
+}
+
+func (s *Server) handleCatalogJSON(w http.ResponseWriter, r *http.Request) {
+	c := s.catalog.Fetch(r.Context())
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := json.NewEncoder(w).Encode(c); err != nil {
+		s.logger.Error("catalog json encode failed", "err", err)
+	}
 }
 
 func redirectTarget(r *http.Request) string {

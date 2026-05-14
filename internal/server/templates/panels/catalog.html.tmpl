@@ -1,0 +1,121 @@
+{{define "title"}}catalog - personal-dashboard{{end}}
+{{define "main"}}
+<header>
+  <h1>catalog</h1>
+  <p class="muted">cross-repo dependency graph from <code>coilyco-ai/data/catalog-graph.yaml</code>, overlaid with live signals from repo-recall.</p>
+</header>
+
+{{with .Panel.Catalog}}
+{{if .YamlErr}}
+<section class="card">
+  <h2>yaml error</h2>
+  <p class="muted"><code>{{.YamlErr}}</code></p>
+  <p class="muted">graph path: <code>{{.GraphPath}}</code>. Run <code>coily exec build-catalog-graph</code> in coilyco-ai to regenerate.</p>
+</section>
+{{else}}
+
+<section class="card catalog-graph">
+  <h2>graph</h2>
+  {{if .RepoErr}}
+    <p class="muted">live overlay degraded: <code>{{.RepoErr}}</code>. graph still renders, badges absent.</p>
+  {{end}}
+  <pre class="mermaid">graph LR
+{{range $sys := .Systems -}}
+  subgraph {{nodeID $sys}}["{{$sys}}"]
+{{range index $.Panel.Catalog.BySystem $sys -}}
+    {{nodeID .Name}}["{{.Name}}{{if .Live.HaveRow}}{{if .Live.OpenIssues}}<br/>📋 {{.Live.OpenIssues}}{{end}}{{if .Live.ActionRequired}} ⚠️{{end}}{{end}}"]
+{{end -}}
+  end
+{{end -}}
+{{range .Edges -}}
+{{if eq .Type "dependsOn"}}  {{nodeID (lastSeg .From)}} --> {{nodeID (lastSeg .To)}}
+{{end -}}
+{{end -}}
+{{range .Nodes -}}
+{{if .Live.HaveRow -}}
+{{if eq .Live.CIStatus "failure"}}  class {{nodeID .Name}} ciFail
+{{else if eq .Live.CIStatus "running"}}  class {{nodeID .Name}} ciRun
+{{else if eq .Live.CIStatus "success"}}  class {{nodeID .Name}} ciOk
+{{end -}}
+{{end -}}
+{{end -}}
+classDef ciOk stroke:#3a3,stroke-width:2px
+classDef ciFail stroke:#c33,stroke-width:3px
+classDef ciRun stroke:#fa3,stroke-width:2px,stroke-dasharray:4
+</pre>
+  <p class="muted">stroke green = CI success, red = failure, orange-dashed = running. badges: 📋 open issues, ⚠️ action_required.</p>
+</section>
+
+<section class="card">
+  <h2>systems</h2>
+  <p class="muted">tap a repo to expand its detail. live signals come from repo-recall (<code>{{.RepoRecall}}</code>).</p>
+  {{range $sys := .Systems}}
+  <details class="catalog-system" open>
+    <summary><strong>{{$sys}}</strong> <span class="muted">({{len (index $.Panel.Catalog.BySystem $sys)}})</span></summary>
+    {{range index $.Panel.Catalog.BySystem $sys}}
+    <details class="catalog-node">
+      <summary class="catalog-node-summary">
+        <span class="catalog-node-name">{{.Name}}</span>
+        <span class="catalog-node-type muted">{{.Type}} · {{.Lifecycle}}</span>
+        {{if .Live.HaveRow}}
+          {{if eq .Live.CIStatus "failure"}}<span class="badge bad">ci fail</span>{{end}}
+          {{if eq .Live.CIStatus "running"}}<span class="badge warn">ci running</span>{{end}}
+          {{if eq .Live.CIStatus "success"}}<span class="badge ok">ci ok</span>{{end}}
+          {{if .Live.OpenIssues}}<span class="badge">{{.Live.OpenIssues}} issues</span>{{end}}
+          {{if .Live.OpenPRs}}<span class="badge">{{.Live.OpenPRs}} prs</span>{{end}}
+          {{if .Live.ActionRequired}}<span class="badge warn">action</span>{{end}}
+        {{else}}
+          <span class="badge muted">no repo-recall row</span>
+        {{end}}
+      </summary>
+      <div class="catalog-node-body">
+        <p>{{.Description}}</p>
+        <dl>
+          <dt>kind</dt><dd>{{.Kind}} · {{.Type}} · {{.Lifecycle}}</dd>
+          <dt>owner</dt><dd>{{.Owner}}</dd>
+          {{if .DependsOn}}<dt>depends on</dt><dd>{{range $i, $d := .DependsOn}}{{if $i}}, {{end}}<code>{{lastSeg $d}}</code>{{end}}</dd>{{end}}
+          {{if .DependedBy}}<dt>depended by</dt><dd>{{range $i, $d := .DependedBy}}{{if $i}}, {{end}}<code>{{lastSeg $d}}</code>{{end}}</dd>{{end}}
+          {{if .ProvidesApis}}<dt>provides</dt><dd>{{range $i, $a := .ProvidesApis}}{{if $i}}, {{end}}<code>{{$a}}</code>{{end}}</dd>{{end}}
+          {{if .ConsumesApis}}<dt>consumes</dt><dd>{{range $i, $a := .ConsumesApis}}{{if $i}}, {{end}}<code>{{$a}}</code>{{end}}</dd>{{end}}
+          {{if .Live.HaveRow}}
+            <dt>activity</dt><dd>{{.Live.Commits30d}} commits / 30d · {{.Live.Authors30d}} authors · score {{printf "%.1f" .Live.ActivityScore}}</dd>
+            <dt>branch</dt><dd><code>{{.Live.HeadRef}}</code>{{if ne .Live.HeadRef .Live.DefaultBranch}} (default <code>{{.Live.DefaultBranch}}</code>){{end}}{{if .Live.CommitsAhead}} · {{.Live.CommitsAhead}} ahead{{end}}{{if .Live.CommitsBehind}} · {{.Live.CommitsBehind}} behind{{end}}</dd>
+            {{if .Live.ActionSignals}}<dt>signals</dt><dd>{{range $i, $s := .Live.ActionSignals}}{{if $i}}, {{end}}<code>{{$s}}</code>{{end}}</dd>{{end}}
+            {{if .Live.IssuesAssignedToMe}}<dt>mine</dt><dd>{{.Live.IssuesAssignedToMe}} issues assigned · {{.Live.PRsAwaitingMyReview}} prs to review</dd>{{end}}
+            {{if .Live.DeployStatus}}<dt>deploy</dt><dd><code>{{.Live.DeployStatus}}</code>{{if .Live.DeployWorkflow}} via <code>{{.Live.DeployWorkflow}}</code>{{end}}</dd>{{end}}
+            {{if .Live.RemoteURL}}<dt>repo</dt><dd><a href="{{.Live.RemoteURL}}" target="_blank" rel="noopener">{{.Live.RemoteURL}}</a></dd>{{end}}
+          {{end}}
+        </dl>
+      </div>
+    </details>
+    {{end}}
+  </details>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>refresh</h2>
+  <p class="muted">graph regenerates from <code>coily exec build-catalog-graph</code> in coilyco-ai. live overlay refreshes from repo-recall's scan (default every 5m).</p>
+  <p class="row">
+    <a class="tap" href="/panels/catalog">reload panel</a>
+    <a class="tap" href="/api/catalog">json</a>
+    <a class="tap" href="{{.RepoRecall}}" target="_blank" rel="noopener">repo-recall</a>
+  </p>
+  <p class="muted">generated at {{.GeneratedAt.Format "15:04:05"}}</p>
+</section>
+{{end}}
+{{end}}
+
+<p><a class="tap" href="/">back</a></p>
+
+<script type="module">
+  // mermaid only loads when the panel renders. On narrow viewports the
+  // graph block is display:none via app.css so the script is wasted
+  // work; gate on viewport width.
+  if (window.matchMedia("(min-width: 720px)").matches) {
+    const m = await import("https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs");
+    m.default.initialize({ startOnLoad: false, theme: "dark", securityLevel: "loose" });
+    await m.default.run({ querySelector: "pre.mermaid" });
+  }
+</script>
+{{end}}
