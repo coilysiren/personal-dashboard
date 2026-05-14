@@ -21,7 +21,10 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
-	srv := server.New(logger)
+	srv := server.New(logger, server.Config{
+		ElevenLabsAPIKey:  os.Getenv("ELEVENLABS_API_KEY"),
+		ElevenLabsVoiceID: os.Getenv("ELEVENLABS_VOICE_ID"),
+	})
 
 	httpSrv := &http.Server{
 		Addr:              *addr,

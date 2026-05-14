@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/coilysiren/personal-dashboard/internal/session"
+	"github.com/coilysiren/personal-dashboard/internal/voice"
 )
 
 //go:embed templates/*.html.tmpl
@@ -25,6 +26,7 @@ type Server struct {
 	logger    *slog.Logger
 	templates *template.Template
 	sessions  *session.Store
+	voice     *voice.Client
 }
 
 // PageData is the template payload every route renders against.
@@ -35,12 +37,24 @@ type PageData struct {
 	Revealed bool
 }
 
-func New(logger *slog.Logger) *Server {
+// Config is what New takes. Zero values are usable: missing voice creds
+// leave the voice client disabled, no crash.
+type Config struct {
+	ElevenLabsAPIKey  string
+	ElevenLabsVoiceID string
+}
+
+func New(logger *slog.Logger, cfg Config) *Server {
 	tmpl := template.Must(template.ParseFS(templateFS, "templates/*.html.tmpl"))
+	v := voice.New(cfg.ElevenLabsAPIKey, cfg.ElevenLabsVoiceID)
+	if !v.Enabled() {
+		logger.Warn("voice disabled: missing ELEVENLABS_API_KEY or ELEVENLABS_VOICE_ID")
+	}
 	return &Server{
 		logger:    logger,
 		templates: tmpl,
 		sessions:  session.NewStore(),
+		voice:     v,
 	}
 }
 
@@ -54,6 +68,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /{$}", s.handleIndex)
 	mux.HandleFunc("POST /reveal", s.handleReveal)
 	mux.HandleFunc("POST /hide", s.handleHide)
+	mux.HandleFunc("POST /api/voice/say", s.handleVoiceSay)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -143,6 +158,33 @@ func (s *Server) handleHide(w http.ResponseWriter, r *http.Request) {
 	}
 	s.sessions.Hide(sessionID(r), route)
 	http.Redirect(w, r, redirectTarget(r), http.StatusSeeOther)
+}
+
+// handleVoiceSay synthesizes audio for the "text" form value and streams
+// mp3 back to the client. Used by the PWA to play event announcements.
+func (s *Server) handleVoiceSay(w http.ResponseWriter, r *http.Request) {
+	if !s.voice.Enabled() {
+		http.Error(w, "voice disabled", http.StatusServiceUnavailable)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	text := r.FormValue("text")
+	if text == "" {
+		http.Error(w, "missing text", http.StatusBadRequest)
+		return
+	}
+	audio, err := s.voice.Synthesize(r.Context(), text)
+	if err != nil {
+		s.logger.Error("voice synthesize failed", "err", err)
+		http.Error(w, "synthesize failed", http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "audio/mpeg")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(audio)
 }
 
 func redirectTarget(r *http.Request) string {

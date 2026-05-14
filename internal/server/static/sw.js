@@ -6,6 +6,7 @@ const SHELL_ASSETS = [
   "/",
   "/static/app.css",
   "/static/htmx.min.js",
+  "/static/voice.js",
   "/static/manifest.webmanifest",
 ];
 
