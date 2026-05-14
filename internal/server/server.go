@@ -18,6 +18,14 @@ import (
 //go:embed templates/*.html.tmpl templates/panels/*.html.tmpl
 var templateFS embed.FS
 
+// pageTemplates is the path to each page-specific template, keyed by
+// page name. Each page gets its own template namespace at construction
+// time so {{define "main"}} blocks do not collide across pages.
+var pageTemplates = map[string]string{
+	"index":          "templates/index.html.tmpl",
+	"allowlist-gap":  "templates/panels/allowlist-gap.html.tmpl",
+}
+
 //go:embed static
 var staticFS embed.FS
 
@@ -27,7 +35,7 @@ const sessionIDKey ctxKey = 1
 
 type Server struct {
 	logger     *slog.Logger
-	templates  *template.Template
+	pages      map[string]*template.Template
 	sessions   *session.Store
 	voice      *voice.Client
 	coilyAudit *coilyaudit.Source
@@ -51,10 +59,18 @@ type Config struct {
 }
 
 func New(logger *slog.Logger, cfg Config) *Server {
-	tmpl := template.Must(template.ParseFS(templateFS,
-		"templates/*.html.tmpl",
-		"templates/panels/*.html.tmpl",
-	))
+	// Parse base.html.tmpl once, clone per page, then layer the page-
+	// specific template on top. This gives each page its own
+	// {{define "main"}} namespace so they cannot stomp on each other.
+	base := template.Must(template.ParseFS(templateFS, "templates/base.html.tmpl"))
+	pages := make(map[string]*template.Template, len(pageTemplates))
+	for name, path := range pageTemplates {
+		t, err := base.Clone()
+		if err != nil {
+			panic("server: clone base template: " + err.Error())
+		}
+		pages[name] = template.Must(t.ParseFS(templateFS, path))
+	}
 	v := voice.New(cfg.ElevenLabsAPIKey, cfg.ElevenLabsVoiceID)
 	if !v.Enabled() {
 		logger.Warn("voice disabled: missing ELEVENLABS_API_KEY or ELEVENLABS_VOICE_ID")
@@ -67,10 +83,27 @@ func New(logger *slog.Logger, cfg Config) *Server {
 	}
 	return &Server{
 		logger:     logger,
-		templates:  tmpl,
+		pages:      pages,
 		sessions:   session.NewStore(),
 		voice:      v,
 		coilyAudit: audit,
+	}
+}
+
+// render runs the named page template, isolated from other pages'
+// {{define}} blocks. Each page is parsed with its own clone of the
+// base layout at construction time.
+func (s *Server) render(w http.ResponseWriter, name string, data any) {
+	t, ok := s.pages[name]
+	if !ok {
+		s.logger.Error("unknown page template", "name", name)
+		http.Error(w, "render error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := t.ExecuteTemplate(w, "base", data); err != nil {
+		s.logger.Error("render failed", "page", name, "err", err)
+		// Headers already sent; just stop writing.
 	}
 }
 
@@ -139,11 +172,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Route:    route,
 		Revealed: s.sessions.IsRevealed(sessionID(r), route),
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.templates.ExecuteTemplate(w, "index.html.tmpl", data); err != nil {
-		s.logger.Error("render index failed", "err", err)
-		http.Error(w, "render error", http.StatusInternalServerError)
-	}
+	s.render(w, "index", data)
 }
 
 // handleReveal flips a route revealed for the current session. The
@@ -214,11 +243,7 @@ func (s *Server) handleAllowlistGap(w http.ResponseWriter, r *http.Request) {
 			RelTime: humanizeRel(row.Time),
 		})
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.templates.ExecuteTemplate(w, "allowlist-gap.html.tmpl", data); err != nil {
-		s.logger.Error("render allowlist-gap failed", "err", err)
-		http.Error(w, "render error", http.StatusInternalServerError)
-	}
+	s.render(w, "allowlist-gap", data)
 }
 
 func firstLine(s string) string {
