@@ -21,7 +21,24 @@
     }
   </script>
 </head>
-<body>
-  <main class="stack">{{block "main" .}}{{end}}</main>
+<body class="{{if .Revealed}}revealed{{end}}">
+  <main class="stack">
+    {{block "reveal-toggle" .}}
+      {{if .Revealed}}
+        <form method="post" action="/hide" class="reveal-toggle">
+          <input type="hidden" name="route" value="{{.Route}}">
+          <input type="hidden" name="next" value="{{.Route}}">
+          <button type="submit" class="tap">hide private content</button>
+        </form>
+      {{else}}
+        <form method="post" action="/reveal" class="reveal-toggle">
+          <input type="hidden" name="route" value="{{.Route}}">
+          <input type="hidden" name="next" value="{{.Route}}">
+          <button type="submit" class="tap accent">reveal private content</button>
+        </form>
+      {{end}}
+    {{end}}
+    {{block "main" .}}{{end}}
+  </main>
 </body>
 </html>{{end}}

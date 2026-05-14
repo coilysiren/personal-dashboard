@@ -32,6 +32,23 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Background pruner for the session store. Runs every 5 minutes; cheap
+	// even at hundreds of sessions because the map is small.
+	pruneTick := time.NewTicker(5 * time.Minute)
+	defer pruneTick.Stop()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-pruneTick.C:
+				if n := srv.Sessions().Prune(); n > 0 {
+					logger.Info("session pruner", "evicted", n)
+				}
+			}
+		}
+	}()
+
 	go func() {
 		logger.Info("daemon listening", "addr", *addr)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
