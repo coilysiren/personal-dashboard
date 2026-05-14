@@ -118,6 +118,11 @@ a { color: var(--accent); }
 .badge.cat-backlog { background: #432a3a; color: #d9c; }
 .inline { display: inline; }
 
+/* Steam panel. */
+.steam-row { align-items: center; gap: 0.75rem; flex-wrap: nowrap; }
+.steam-icon { width: 32px; height: 32px; border-radius: 4px; flex-shrink: 0; }
+.steam-card h2 { margin: 0; font-size: 1rem; }
+
 /* Denials table for the allowlist-gap panel. One of the few panels
    where a table is structurally required. */
 .denials {

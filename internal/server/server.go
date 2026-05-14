@@ -13,6 +13,7 @@ import (
 
 	"github.com/coilysiren/personal-dashboard/internal/session"
 	"github.com/coilysiren/personal-dashboard/internal/sources/coilyaudit"
+	"github.com/coilysiren/personal-dashboard/internal/sources/steam"
 	"github.com/coilysiren/personal-dashboard/internal/sources/vaultinbox"
 	"github.com/coilysiren/personal-dashboard/internal/state"
 	"github.com/coilysiren/personal-dashboard/internal/voice"
@@ -28,6 +29,7 @@ var pageTemplates = map[string]string{
 	"index":         "templates/index.html.tmpl",
 	"allowlist-gap": "templates/panels/allowlist-gap.html.tmpl",
 	"daily-inbox":   "templates/panels/daily-inbox.html.tmpl",
+	"steam":         "templates/panels/steam.html.tmpl",
 }
 
 //go:embed static
@@ -45,6 +47,7 @@ type Server struct {
 	coilyAudit *coilyaudit.Source
 	vaultInbox *vaultinbox.Source
 	inboxRead  *state.InboxRead
+	steam      *steam.Client
 }
 
 // PageData is the template payload every route renders against.
@@ -64,6 +67,8 @@ type Config struct {
 	CoilyAuditDir     string
 	VaultInboxDir     string
 	StateDir          string
+	SteamAPIKey       string
+	SteamUserID       string
 }
 
 func New(logger *slog.Logger, cfg Config) *Server {
@@ -101,6 +106,10 @@ func New(logger *slog.Logger, cfg Config) *Server {
 		logger.Warn("inbox-read state load failed", "err", err)
 		inboxRead, _ = state.LoadInboxRead("")
 	}
+	st := steam.New(cfg.SteamAPIKey, cfg.SteamUserID)
+	if !st.Enabled() {
+		logger.Warn("steam disabled: missing STEAM_API_KEY or STEAM_USER_ID")
+	}
 	return &Server{
 		logger:     logger,
 		pages:      pages,
@@ -109,6 +118,7 @@ func New(logger *slog.Logger, cfg Config) *Server {
 		coilyAudit: audit,
 		vaultInbox: inbox,
 		inboxRead:  inboxRead,
+		steam:      st,
 	}
 }
 
@@ -144,6 +154,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /panels/daily-inbox", s.handleDailyInbox)
 	mux.HandleFunc("POST /panels/daily-inbox/read", s.handleDailyInboxRead)
 	mux.HandleFunc("POST /panels/daily-inbox/unread", s.handleDailyInboxUnread)
+	mux.HandleFunc("GET /panels/steam", s.handleSteam)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -379,6 +390,36 @@ func (s *Server) handleDailyInboxFlip(w http.ResponseWriter, r *http.Request, re
 		s.logger.Error("inbox read flip failed", "id", id, "err", err)
 	}
 	http.Redirect(w, r, redirectTarget(r), http.StatusSeeOther)
+}
+
+// steamData is the payload for the Steam panel.
+type steamData struct {
+	PageData
+	Panel struct {
+		Enabled bool
+		Err     string
+		Games   []steam.RecentlyPlayed
+	}
+}
+
+func (s *Server) handleSteam(w http.ResponseWriter, r *http.Request) {
+	const route = "/panels/steam"
+	data := steamData{
+		PageData: PageData{
+			Route:    route,
+			Revealed: s.sessions.IsRevealed(sessionID(r), route),
+		},
+	}
+	data.Panel.Enabled = s.steam.Enabled()
+	if data.Panel.Enabled {
+		games, err := s.steam.Recent(r.Context(), 5)
+		if err != nil {
+			data.Panel.Err = err.Error()
+		} else {
+			data.Panel.Games = games
+		}
+	}
+	s.render(w, "steam", data)
 }
 
 // handleVoiceSay synthesizes audio for the "text" form value and streams

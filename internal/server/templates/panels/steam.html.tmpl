@@ -1,0 +1,33 @@
+{{define "title"}}steam - personal-dashboard{{end}}
+{{define "main"}}
+<header>
+  <h1>steam recently played</h1>
+  <p class="muted">last 2 weeks of playtime.</p>
+</header>
+{{if not .Panel.Enabled}}
+<section class="card">
+  <p class="muted">Steam source disabled. Set <code>STEAM_API_KEY</code> and <code>STEAM_USER_ID</code> in the daemon env and restart.</p>
+</section>
+{{else if .Panel.Err}}
+<section class="card">
+  <p class="muted">Steam API error: <code>{{.Panel.Err}}</code></p>
+</section>
+{{else if not .Panel.Games}}
+<section class="card">
+  <p class="muted">no recent playtime in the last 2 weeks.</p>
+</section>
+{{else}}
+{{range .Panel.Games}}
+<section class="card steam-card">
+  <div class="row steam-row">
+    {{if .IconURL}}<img class="steam-icon" src="{{.IconURL}}" alt="" loading="lazy">{{end}}
+    <div>
+      <h2><a href="{{.StoreURL}}">{{.Name}}</a></h2>
+      <p class="muted">{{.Playtime2Weeks}} min in last 2 weeks - {{.PlaytimeForever}} min lifetime</p>
+    </div>
+  </div>
+</section>
+{{end}}
+{{end}}
+<p><a class="tap" href="/">back</a></p>
+{{end}}

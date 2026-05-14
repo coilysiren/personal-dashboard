@@ -27,6 +27,8 @@ func main() {
 		CoilyAuditDir:     os.Getenv("COILY_AUDIT_DIR"),
 		VaultInboxDir:     os.Getenv("PERSONAL_DASHBOARD_VAULT_PATH"),
 		StateDir:          os.Getenv("PERSONAL_DASHBOARD_STATE_DIR"),
+		SteamAPIKey:       os.Getenv("STEAM_API_KEY"),
+		SteamUserID:       os.Getenv("STEAM_USER_ID"),
 	})
 
 	httpSrv := &http.Server{
