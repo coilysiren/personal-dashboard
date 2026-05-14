@@ -7,11 +7,14 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/coilysiren/personal-dashboard/internal/session"
 	"github.com/coilysiren/personal-dashboard/internal/sources/coilyaudit"
+	"github.com/coilysiren/personal-dashboard/internal/sources/vaultinbox"
+	"github.com/coilysiren/personal-dashboard/internal/state"
 	"github.com/coilysiren/personal-dashboard/internal/voice"
 )
 
@@ -22,8 +25,9 @@ var templateFS embed.FS
 // page name. Each page gets its own template namespace at construction
 // time so {{define "main"}} blocks do not collide across pages.
 var pageTemplates = map[string]string{
-	"index":          "templates/index.html.tmpl",
-	"allowlist-gap":  "templates/panels/allowlist-gap.html.tmpl",
+	"index":         "templates/index.html.tmpl",
+	"allowlist-gap": "templates/panels/allowlist-gap.html.tmpl",
+	"daily-inbox":   "templates/panels/daily-inbox.html.tmpl",
 }
 
 //go:embed static
@@ -39,6 +43,8 @@ type Server struct {
 	sessions   *session.Store
 	voice      *voice.Client
 	coilyAudit *coilyaudit.Source
+	vaultInbox *vaultinbox.Source
+	inboxRead  *state.InboxRead
 }
 
 // PageData is the template payload every route renders against.
@@ -56,6 +62,8 @@ type Config struct {
 	ElevenLabsAPIKey  string
 	ElevenLabsVoiceID string
 	CoilyAuditDir     string
+	VaultInboxDir     string
+	StateDir          string
 }
 
 func New(logger *slog.Logger, cfg Config) *Server {
@@ -81,12 +89,26 @@ func New(logger *slog.Logger, cfg Config) *Server {
 	} else {
 		audit = coilyaudit.New()
 	}
+	inbox := vaultinbox.New(cfg.VaultInboxDir)
+
+	stateDir := cfg.StateDir
+	if stateDir == "" {
+		home, _ := os.UserHomeDir()
+		stateDir = home + "/.personal-dashboard/state"
+	}
+	inboxRead, err := state.LoadInboxRead(stateDir + "/inbox-read.json")
+	if err != nil {
+		logger.Warn("inbox-read state load failed", "err", err)
+		inboxRead, _ = state.LoadInboxRead("")
+	}
 	return &Server{
 		logger:     logger,
 		pages:      pages,
 		sessions:   session.NewStore(),
 		voice:      v,
 		coilyAudit: audit,
+		vaultInbox: inbox,
+		inboxRead:  inboxRead,
 	}
 }
 
@@ -119,6 +141,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /hide", s.handleHide)
 	mux.HandleFunc("POST /api/voice/say", s.handleVoiceSay)
 	mux.HandleFunc("GET /panels/allowlist-gap", s.handleAllowlistGap)
+	mux.HandleFunc("GET /panels/daily-inbox", s.handleDailyInbox)
+	mux.HandleFunc("POST /panels/daily-inbox/read", s.handleDailyInboxRead)
+	mux.HandleFunc("POST /panels/daily-inbox/unread", s.handleDailyInboxUnread)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -280,6 +305,80 @@ func fmtInt(i int) string {
 		i /= 10
 	}
 	return string(b)
+}
+
+// dailyInboxEntry is the per-row payload for the daily-inbox panel.
+type dailyInboxEntry struct {
+	ID        string
+	Date      string
+	Category  string
+	Title     string
+	Synthesis string
+	Read      bool
+}
+
+type dailyInboxData struct {
+	PageData
+	Panel struct {
+		Entries []dailyInboxEntry
+	}
+}
+
+func (s *Server) handleDailyInbox(w http.ResponseWriter, r *http.Request) {
+	const route = "/panels/daily-inbox"
+	files, err := s.vaultInbox.List(60)
+	if err != nil {
+		s.logger.Error("read vault inbox failed", "err", err)
+		http.Error(w, "vault read failed", http.StatusInternalServerError)
+		return
+	}
+	data := dailyInboxData{
+		PageData: PageData{
+			Route:    route,
+			Revealed: s.sessions.IsRevealed(sessionID(r), route),
+		},
+	}
+	for _, df := range files {
+		data.Panel.Entries = append(data.Panel.Entries, dailyInboxEntry{
+			ID:        df.ID,
+			Date:      df.Date,
+			Category:  df.Category,
+			Title:     df.Title,
+			Synthesis: df.Synthesis,
+			Read:      s.inboxRead.IsRead(df.ID),
+		})
+	}
+	s.render(w, "daily-inbox", data)
+}
+
+func (s *Server) handleDailyInboxRead(w http.ResponseWriter, r *http.Request) {
+	s.handleDailyInboxFlip(w, r, true)
+}
+
+func (s *Server) handleDailyInboxUnread(w http.ResponseWriter, r *http.Request) {
+	s.handleDailyInboxFlip(w, r, false)
+}
+
+func (s *Server) handleDailyInboxFlip(w http.ResponseWriter, r *http.Request, read bool) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	id := r.FormValue("id")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+	var err error
+	if read {
+		err = s.inboxRead.MarkRead(id)
+	} else {
+		err = s.inboxRead.MarkUnread(id)
+	}
+	if err != nil {
+		s.logger.Error("inbox read flip failed", "id", id, "err", err)
+	}
+	http.Redirect(w, r, redirectTarget(r), http.StatusSeeOther)
 }
 
 // handleVoiceSay synthesizes audio for the "text" form value and streams

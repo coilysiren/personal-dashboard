@@ -1,0 +1,41 @@
+{{define "title"}}daily inbox - personal-dashboard{{end}}
+{{define "main"}}
+<header>
+  <h1>daily inbox</h1>
+  <p class="muted">{{len .Panel.Entries}} items, newest first.</p>
+</header>
+{{if not .Panel.Entries}}
+<section class="card">
+  <p class="muted">no daily-* files in the vault inbox. either the routines haven't run today or the path is misconfigured.</p>
+</section>
+{{else}}
+{{range .Panel.Entries}}
+<section class="card inbox-card {{if .Read}}read{{end}}">
+  <div class="row inbox-head">
+    <span class="badge cat-{{.Category}}">{{.Category}}</span>
+    <span class="muted">{{.Date}}</span>
+  </div>
+  <h2><a href="#{{.ID}}" id="{{.ID}}">{{.Title}}</a></h2>
+  {{if .Synthesis}}
+  <p class="redactable">{{.Synthesis}}</p>
+  {{end}}
+  <div class="row">
+    {{if .Read}}
+      <form method="post" action="/panels/daily-inbox/unread" class="inline">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <input type="hidden" name="next" value="/panels/daily-inbox#{{.ID}}">
+        <button type="submit" class="tap">mark unread</button>
+      </form>
+    {{else}}
+      <form method="post" action="/panels/daily-inbox/read" class="inline">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <input type="hidden" name="next" value="/panels/daily-inbox#{{.ID}}">
+        <button type="submit" class="tap accent">mark read</button>
+      </form>
+    {{end}}
+  </div>
+</section>
+{{end}}
+{{end}}
+<p><a class="tap" href="/">back</a></p>
+{{end}}

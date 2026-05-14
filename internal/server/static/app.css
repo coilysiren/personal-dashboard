@@ -94,6 +94,30 @@ a { color: var(--accent); }
   user-select: text;
 }
 
+/* Daily inbox panel. */
+.inbox-card.read { opacity: 0.5; }
+.inbox-head { gap: 0.5rem; align-items: center; }
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: var(--card-border);
+  color: var(--fg);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.badge.cat-operational { background: #2a3f2a; color: #9ec79e; }
+.badge.cat-errors { background: #432a2a; color: #d99; }
+.badge.cat-social { background: #2a2f43; color: #99c; }
+.badge.cat-productive { background: #2a3a43; color: #9cd; }
+.badge.cat-educational { background: #3a2a43; color: #c9d; }
+.badge.cat-recruiting { background: #43332a; color: #d9c; }
+.badge.cat-memory { background: #3a3a2a; color: #cc9; }
+.badge.cat-activity { background: #2a4343; color: #9dd; }
+.badge.cat-backlog { background: #432a3a; color: #d9c; }
+.inline { display: inline; }
+
 /* Denials table for the allowlist-gap panel. One of the few panels
    where a table is structurally required. */
 .denials {

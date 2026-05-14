@@ -25,6 +25,8 @@ func main() {
 		ElevenLabsAPIKey:  os.Getenv("ELEVENLABS_API_KEY"),
 		ElevenLabsVoiceID: os.Getenv("ELEVENLABS_VOICE_ID"),
 		CoilyAuditDir:     os.Getenv("COILY_AUDIT_DIR"),
+		VaultInboxDir:     os.Getenv("PERSONAL_DASHBOARD_VAULT_PATH"),
+		StateDir:          os.Getenv("PERSONAL_DASHBOARD_STATE_DIR"),
 	})
 
 	httpSrv := &http.Server{
