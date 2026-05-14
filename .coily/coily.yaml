@@ -17,6 +17,9 @@ commands:
   run:
     run: make run
     description: Start the daemon locally on 127.0.0.1:31337 (loopback only).
+  dev:
+    run: make dev
+    description: Watch sources and auto-rebuild + restart the daemon on change.
   fmt:
     run: make fmt
     description: Format Go sources in place.

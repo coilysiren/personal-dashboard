@@ -12,6 +12,9 @@ test: ## Run the full Go test suite.
 run: ## Start the daemon locally on 127.0.0.1:31337 (loopback only).
 	go run ./cmd/personal-dashboard
 
+dev: ## Watch sources and auto-rebuild + restart the daemon on change.
+	go run ./cmd/dev --addr=127.0.0.1:31337
+
 fmt: ## Format Go sources in place.
 	go fmt ./...
 
