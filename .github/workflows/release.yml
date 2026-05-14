@@ -99,3 +99,52 @@ jobs:
             -f "client_payload[tag]=${TAG}" \
             -f "client_payload[url]=${NEW_URL}" \
             -f "client_payload[sha]=${NEW_SHA}"
+
+  deploy-kai-server:
+    needs: [release, bump-tap]
+    if: ${{ needs.release.outputs.tag != '' }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.release.outputs.tag }}
+    steps:
+      - name: Wait for tap to carry the new tag
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        # bump-personal-dashboard runs in homebrew-tap and PUTs the
+        # Formula via Contents API. Poll the raw file until the url line
+        # carries the new tag, capped at ~3 minutes. Without this, the
+        # subsequent brew upgrade on kai-server would still see the old
+        # tarball.
+        run: |
+          set -euo pipefail
+          formula="https://raw.githubusercontent.com/coilysiren/homebrew-tap/main/Formula/personal-dashboard.rb"
+          for i in $(seq 1 18); do
+            if curl -fsSL "$formula" | grep -q "/${TAG}.tar.gz\""; then
+              echo "tap carries $TAG"
+              exit 0
+            fi
+            echo "waiting for tap bump (attempt $i)..."
+            sleep 10
+          done
+          echo "tap never landed $TAG; aborting"
+          exit 1
+
+      - name: Join tailnet
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          use-cache: 'true'
+
+      - name: Trigger personal-dashboard-update on kai-server
+        # Tailscale SSH handles auth via the tailnet ACL; no keys on the
+        # runner. The unit sudoers entry is NOPASSWD so the bare ssh
+        # exec works under non-TTY. Output of the unit shows up via
+        # journalctl on kai-server; we just need to know the start call
+        # was accepted here.
+        run: |
+          set -euo pipefail
+          ssh -o StrictHostKeyChecking=accept-new kai@kai-server \
+            'sudo systemctl start personal-dashboard-update.service'
+          echo "triggered personal-dashboard-update.service on kai-server"
