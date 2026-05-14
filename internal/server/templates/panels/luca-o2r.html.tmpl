@@ -1,0 +1,36 @@
+{{define "title"}}luca / o2r - personal-dashboard{{end}}
+{{define "main"}}
+<header>
+  <h1>luca / o2r</h1>
+  <p class="muted">otel-a2a-relay traces. waterfall in grafana, sessions in phoenix.</p>
+</header>
+<section class="card">
+  <h2>digest</h2>
+  {{if not .Panel.Digest.HaveVM}}
+    <p class="muted">VictoriaMetrics not configured. Set <code>VICTORIAMETRICS_URL</code> in the daemon env to populate this card.</p>
+  {{else if .Panel.Digest.Err}}
+    <p class="muted">VM error: <code>{{.Panel.Digest.Err}}</code></p>
+  {{else}}
+    <p><strong>{{printf "%.1f" .Panel.Digest.SpanCount}}</strong> spans/sec over the <span class="muted">{{.Panel.Digest.Window}}</span></p>
+  {{end}}
+</section>
+<section class="card">
+  <h2>deep-links</h2>
+  <p class="row">
+    {{if .Panel.GrafanaURL}}
+      <a class="tap accent" href="{{.Panel.GrafanaURL}}/d/o2r-overview" target="_blank" rel="noopener">grafana: o2r-overview</a>
+      <a class="tap" href="{{.Panel.GrafanaURL}}/d/luca-flow" target="_blank" rel="noopener">grafana: luca-flow</a>
+    {{else}}
+      <span class="muted">set <code>GRAFANA_URL</code> to enable grafana links</span>
+    {{end}}
+  </p>
+  <p class="row">
+    {{if .Panel.PhoenixURL}}
+      <a class="tap accent" href="{{.Panel.PhoenixURL}}" target="_blank" rel="noopener">phoenix: sessions</a>
+    {{else}}
+      <span class="muted">set <code>PHOENIX_URL</code> to enable phoenix link</span>
+    {{end}}
+  </p>
+</section>
+<p><a class="tap" href="/">back</a></p>
+{{end}}

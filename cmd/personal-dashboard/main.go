@@ -29,6 +29,9 @@ func main() {
 		StateDir:          os.Getenv("PERSONAL_DASHBOARD_STATE_DIR"),
 		SteamAPIKey:       os.Getenv("STEAM_API_KEY"),
 		SteamUserID:       os.Getenv("STEAM_USER_ID"),
+		GrafanaURL:        os.Getenv("GRAFANA_URL"),
+		PhoenixURL:        os.Getenv("PHOENIX_URL"),
+		VictoriaMetricsURL: os.Getenv("VICTORIAMETRICS_URL"),
 	})
 
 	httpSrv := &http.Server{

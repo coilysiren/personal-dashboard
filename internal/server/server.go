@@ -13,6 +13,7 @@ import (
 
 	"github.com/coilysiren/personal-dashboard/internal/session"
 	"github.com/coilysiren/personal-dashboard/internal/sources/coilyaudit"
+	"github.com/coilysiren/personal-dashboard/internal/sources/o2r"
 	"github.com/coilysiren/personal-dashboard/internal/sources/steam"
 	"github.com/coilysiren/personal-dashboard/internal/sources/vaultinbox"
 	"github.com/coilysiren/personal-dashboard/internal/state"
@@ -30,6 +31,7 @@ var pageTemplates = map[string]string{
 	"allowlist-gap": "templates/panels/allowlist-gap.html.tmpl",
 	"daily-inbox":   "templates/panels/daily-inbox.html.tmpl",
 	"steam":         "templates/panels/steam.html.tmpl",
+	"luca-o2r":      "templates/panels/luca-o2r.html.tmpl",
 }
 
 //go:embed static
@@ -48,6 +50,7 @@ type Server struct {
 	vaultInbox *vaultinbox.Source
 	inboxRead  *state.InboxRead
 	steam      *steam.Client
+	o2r        *o2r.Source
 }
 
 // PageData is the template payload every route renders against.
@@ -69,6 +72,9 @@ type Config struct {
 	StateDir          string
 	SteamAPIKey       string
 	SteamUserID       string
+	GrafanaURL        string
+	PhoenixURL        string
+	VictoriaMetricsURL string
 }
 
 func New(logger *slog.Logger, cfg Config) *Server {
@@ -110,6 +116,7 @@ func New(logger *slog.Logger, cfg Config) *Server {
 	if !st.Enabled() {
 		logger.Warn("steam disabled: missing STEAM_API_KEY or STEAM_USER_ID")
 	}
+	o2rSrc := o2r.New(cfg.GrafanaURL, cfg.PhoenixURL, cfg.VictoriaMetricsURL)
 	return &Server{
 		logger:     logger,
 		pages:      pages,
@@ -119,6 +126,7 @@ func New(logger *slog.Logger, cfg Config) *Server {
 		vaultInbox: inbox,
 		inboxRead:  inboxRead,
 		steam:      st,
+		o2r:        o2rSrc,
 	}
 }
 
@@ -155,6 +163,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /panels/daily-inbox/read", s.handleDailyInboxRead)
 	mux.HandleFunc("POST /panels/daily-inbox/unread", s.handleDailyInboxUnread)
 	mux.HandleFunc("GET /panels/steam", s.handleSteam)
+	mux.HandleFunc("GET /panels/luca-o2r", s.handleLucaO2R)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -420,6 +429,29 @@ func (s *Server) handleSteam(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.render(w, "steam", data)
+}
+
+type lucaO2RData struct {
+	PageData
+	Panel struct {
+		GrafanaURL string
+		PhoenixURL string
+		Digest     o2r.Digest
+	}
+}
+
+func (s *Server) handleLucaO2R(w http.ResponseWriter, r *http.Request) {
+	const route = "/panels/luca-o2r"
+	data := lucaO2RData{
+		PageData: PageData{
+			Route:    route,
+			Revealed: s.sessions.IsRevealed(sessionID(r), route),
+		},
+	}
+	data.Panel.GrafanaURL = s.o2r.GrafanaURL
+	data.Panel.PhoenixURL = s.o2r.PhoenixURL
+	data.Panel.Digest = s.o2r.FetchDigest(r.Context())
+	s.render(w, "luca-o2r", data)
 }
 
 // handleVoiceSay synthesizes audio for the "text" form value and streams
