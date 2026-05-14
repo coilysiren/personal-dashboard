@@ -1,0 +1,28 @@
+[Unit]
+Description=personal-dashboard daemon
+Documentation=https://github.com/coilysiren/personal-dashboard
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/personal-dashboard --addr=%E_ADDR%
+Restart=on-failure
+RestartSec=5s
+Environment=GOMAXPROCS=2
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+
+[Install]
+WantedBy=default.target

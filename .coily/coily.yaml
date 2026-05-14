@@ -1,0 +1,28 @@
+# Per-repo command allowlist for personal-dashboard. Coily is the canonical
+# entry point for dev verbs here; each command delegates to a Make target.
+# Operators (human or agent) type `coily exec <verb>`, not bare `go build`.
+# The lockdown denies direct go invocations.
+#
+# Names follow coily's [a-z0-9-] rule. `coily lint` enforces that
+# `commands.<verb>.run` equals `make <verb>` and that the Makefile target
+# carries a matching `## description` annotation.
+
+commands:
+  build:
+    run: make build
+    description: Compile the daemon binary to ./personal-dashboard.
+  test:
+    run: make test
+    description: Run the full Go test suite.
+  run:
+    run: make run
+    description: Start the daemon locally on 127.0.0.1:31337 (loopback only).
+  fmt:
+    run: make fmt
+    description: Format Go sources in place.
+  vet:
+    run: make vet
+    description: Run go vet across the module.
+  tidy:
+    run: make tidy
+    description: Tidy go.mod and go.sum.

@@ -1,0 +1,24 @@
+/* Mobile-first baseline. Phone-shaped narrow column.
+   PWA shell (#39) replaces this with the real layout primitives. */
+:root {
+  color-scheme: dark light;
+  --bg: #111;
+  --fg: #eee;
+  --muted: #888;
+  --accent: #6ad;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+}
+main {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+h1 { font-size: 1.25rem; margin: 0 0 0.25rem; }
+.muted { color: var(--muted); }
+a { color: var(--accent); }
