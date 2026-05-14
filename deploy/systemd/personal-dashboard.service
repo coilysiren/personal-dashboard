@@ -1,28 +1,26 @@
 [Unit]
-Description=personal-dashboard daemon
+# Reference copy of the kai-server unit. The deployed copy lives in
+# coilysiren/infrastructure/systemd/personal-dashboard.service and is
+# installed via infrastructure/scripts/install-personal-dashboard.sh.
+# Keep the two in sync.
+Description=personal-dashboard (kai-server tailnet-only)
 Documentation=https://github.com/coilysiren/personal-dashboard
-After=network-online.target tailscaled.service
-Wants=network-online.target
+After=syslog.target network.target nss-lookup.target network-online.target tailscaled.service
+Wants=network-online.target tailscaled.service
+StartLimitBurst=5
+StartLimitIntervalSec=60
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/personal-dashboard --addr=%E_ADDR%
 Restart=on-failure
-RestartSec=5s
-Environment=GOMAXPROCS=2
-
-# Hardening
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=read-only
-PrivateTmp=true
-PrivateDevices=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictNamespaces=true
-RestrictRealtime=true
-LockPersonality=true
+RestartSec=10
+User=kai
+WorkingDirectory=/home/kai
+# Daemon binds 127.0.0.1:31337 by default. tailscale serve fronts it onto
+# the tailnet; no public bind, no laptop-localhost bind.
+EnvironmentFile=-/etc/personal-dashboard.env
+ExecStart=/home/linuxbrew/.linuxbrew/bin/personal-dashboard --addr=127.0.0.1:31337
+ExecStop=/bin/kill -TERM $MAINPID
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
