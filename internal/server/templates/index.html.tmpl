@@ -3,9 +3,16 @@
 {{define "main"}}
 <header>
   <h1>personal-dashboard</h1>
-  <p class="muted">scaffold only. panels land in #43-#48.</p>
+  <p class="muted">scaffold + PWA shell. panels land in #43-#48.</p>
 </header>
-<section>
-  <p>Bootstrap milestone (#37) complete. The daemon is running. Next: <a href="https://github.com/coilysiren/personal-dashboard/issues/39">PWA shell</a>.</p>
+<section class="card">
+  <h2>Status</h2>
+  <p>Daemon online. PWA shell ready to install (tap "Add to Home Screen").</p>
+  <p class="muted">Next milestones: <a href="https://github.com/coilysiren/personal-dashboard/issues/38">#38 systemd deploy</a>, <a href="https://github.com/coilysiren/personal-dashboard/issues/40">#40 dispatcher</a>, <a href="https://github.com/coilysiren/personal-dashboard/issues/42">#42 ElevenLabs voice</a>.</p>
+</section>
+<section class="card">
+  <h2>Redaction smoke test</h2>
+  <p>Default state: <span class="redactable">private text here</span></p>
+  <p class="muted">Reveal control wired in #41.</p>
 </section>
 {{end}}

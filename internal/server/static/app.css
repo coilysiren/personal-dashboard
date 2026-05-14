@@ -1,24 +1,95 @@
-/* Mobile-first baseline. Phone-shaped narrow column.
-   PWA shell (#39) replaces this with the real layout primitives. */
+/* Mobile-first layout primitives. Phone-shaped narrow column.
+   Desktop renders the same layout wider - no separate breakpoints below 480px.
+
+   Primitives:
+   - .stack: vertical column with gap.
+   - .card: panel container with rounded corner + subtle border.
+   - .row: horizontal row that wraps on narrow screens.
+   - .tap: minimum 44px tap target.
+   - .muted: secondary text.
+   - .redactable: blurred by default; .revealed flips it on.
+
+   Future panels (#43 - #48) should reach for these classes rather than
+   inventing per-panel layout. New primitives belong here. */
+
 :root {
   color-scheme: dark light;
   --bg: #111;
   --fg: #eee;
   --muted: #888;
   --accent: #6ad;
+  --card-bg: #1a1a1a;
+  --card-border: #2a2a2a;
+  --radius: 12px;
+  --gap: 1rem;
+  --tap-min: 44px;
 }
+
 * { box-sizing: border-box; }
-body {
+
+html, body {
   margin: 0;
-  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  padding: 0;
   background: var(--bg);
   color: var(--fg);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
 main {
   max-width: 480px;
   margin: 0 auto;
   padding: 1rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
+
+header {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+
 h1 { font-size: 1.25rem; margin: 0 0 0.25rem; }
+h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+
+.stack > * + * { margin-top: var(--gap); }
+.row { display: flex; flex-wrap: wrap; gap: var(--gap); }
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+
+.tap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+  padding: 0 1rem;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.tap:active { background: var(--card-border); }
+.tap.accent { border-color: var(--accent); color: var(--accent); }
+
 .muted { color: var(--muted); }
+
 a { color: var(--accent); }
+
+/* Redaction. Server emits .redactable; the per-page reveal flag flips
+   .revealed on the route root. Implementation lands with #41 wiring. */
+.redactable {
+  filter: blur(6px);
+  transition: filter 120ms ease-out;
+  user-select: none;
+}
+.revealed .redactable {
+  filter: none;
+  user-select: text;
+}
