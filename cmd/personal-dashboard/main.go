@@ -32,6 +32,8 @@ func main() {
 		GrafanaURL:        os.Getenv("GRAFANA_URL"),
 		PhoenixURL:        os.Getenv("PHOENIX_URL"),
 		VictoriaMetricsURL: os.Getenv("VICTORIAMETRICS_URL"),
+		BlueskyHandle:     os.Getenv("BLUESKY_HANDLE"),
+		RedditInboxRSS:    os.Getenv("REDDIT_INBOX_RSS"),
 	})
 
 	httpSrv := &http.Server{

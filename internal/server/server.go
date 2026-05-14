@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/coilysiren/personal-dashboard/internal/session"
+	"github.com/coilysiren/personal-dashboard/internal/sources/bluesky"
 	"github.com/coilysiren/personal-dashboard/internal/sources/coilyaudit"
 	"github.com/coilysiren/personal-dashboard/internal/sources/o2r"
+	"github.com/coilysiren/personal-dashboard/internal/sources/reddit"
 	"github.com/coilysiren/personal-dashboard/internal/sources/steam"
 	"github.com/coilysiren/personal-dashboard/internal/sources/vaultinbox"
 	"github.com/coilysiren/personal-dashboard/internal/state"
@@ -32,6 +34,7 @@ var pageTemplates = map[string]string{
 	"daily-inbox":   "templates/panels/daily-inbox.html.tmpl",
 	"steam":         "templates/panels/steam.html.tmpl",
 	"luca-o2r":      "templates/panels/luca-o2r.html.tmpl",
+	"social":        "templates/panels/social.html.tmpl",
 }
 
 //go:embed static
@@ -51,6 +54,8 @@ type Server struct {
 	inboxRead  *state.InboxRead
 	steam      *steam.Client
 	o2r        *o2r.Source
+	bluesky    *bluesky.Client
+	reddit     *reddit.Client
 }
 
 // PageData is the template payload every route renders against.
@@ -75,6 +80,8 @@ type Config struct {
 	GrafanaURL        string
 	PhoenixURL        string
 	VictoriaMetricsURL string
+	BlueskyHandle     string
+	RedditInboxRSS    string
 }
 
 func New(logger *slog.Logger, cfg Config) *Server {
@@ -117,6 +124,14 @@ func New(logger *slog.Logger, cfg Config) *Server {
 		logger.Warn("steam disabled: missing STEAM_API_KEY or STEAM_USER_ID")
 	}
 	o2rSrc := o2r.New(cfg.GrafanaURL, cfg.PhoenixURL, cfg.VictoriaMetricsURL)
+	bs := bluesky.New(cfg.BlueskyHandle)
+	if !bs.Enabled() {
+		logger.Warn("bluesky disabled: missing BLUESKY_HANDLE")
+	}
+	rd := reddit.New(cfg.RedditInboxRSS)
+	if !rd.Enabled() {
+		logger.Warn("reddit disabled: missing REDDIT_INBOX_RSS")
+	}
 	return &Server{
 		logger:     logger,
 		pages:      pages,
@@ -127,6 +142,8 @@ func New(logger *slog.Logger, cfg Config) *Server {
 		inboxRead:  inboxRead,
 		steam:      st,
 		o2r:        o2rSrc,
+		bluesky:    bs,
+		reddit:     rd,
 	}
 }
 
@@ -164,6 +181,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /panels/daily-inbox/unread", s.handleDailyInboxUnread)
 	mux.HandleFunc("GET /panels/steam", s.handleSteam)
 	mux.HandleFunc("GET /panels/luca-o2r", s.handleLucaO2R)
+	mux.HandleFunc("GET /panels/social", s.handleSocial)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -452,6 +470,51 @@ func (s *Server) handleLucaO2R(w http.ResponseWriter, r *http.Request) {
 	data.Panel.PhoenixURL = s.o2r.PhoenixURL
 	data.Panel.Digest = s.o2r.FetchDigest(r.Context())
 	s.render(w, "luca-o2r", data)
+}
+
+type socialData struct {
+	PageData
+	Panel struct {
+		Bluesky struct {
+			Enabled bool
+			Err     string
+			Posts   []bluesky.Post
+		}
+		Reddit struct {
+			Enabled bool
+			Err     string
+			Items   []reddit.Item
+		}
+	}
+}
+
+func (s *Server) handleSocial(w http.ResponseWriter, r *http.Request) {
+	const route = "/panels/social"
+	data := socialData{
+		PageData: PageData{
+			Route:    route,
+			Revealed: s.sessions.IsRevealed(sessionID(r), route),
+		},
+	}
+	data.Panel.Bluesky.Enabled = s.bluesky.Enabled()
+	if data.Panel.Bluesky.Enabled {
+		posts, err := s.bluesky.Recent(r.Context(), 5)
+		if err != nil {
+			data.Panel.Bluesky.Err = err.Error()
+		} else {
+			data.Panel.Bluesky.Posts = posts
+		}
+	}
+	data.Panel.Reddit.Enabled = s.reddit.Enabled()
+	if data.Panel.Reddit.Enabled {
+		items, err := s.reddit.Unread(r.Context())
+		if err != nil {
+			data.Panel.Reddit.Err = err.Error()
+		} else {
+			data.Panel.Reddit.Items = items
+		}
+	}
+	s.render(w, "social", data)
 }
 
 // handleVoiceSay synthesizes audio for the "text" form value and streams

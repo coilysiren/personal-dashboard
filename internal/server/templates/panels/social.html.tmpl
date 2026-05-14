@@ -1,0 +1,45 @@
+{{define "title"}}social - personal-dashboard{{end}}
+{{define "main"}}
+<header>
+  <h1>social</h1>
+  <p class="muted">bluesky + reddit + discord.</p>
+</header>
+
+<section class="card">
+  <h2>bluesky</h2>
+  {{if not .Panel.Bluesky.Enabled}}
+    <p class="muted">Set <code>BLUESKY_HANDLE</code> in the daemon env. Read-only profile feed; timeline + notifications need an authenticated AT proto session (future work).</p>
+  {{else if .Panel.Bluesky.Err}}
+    <p class="muted">bluesky error: <code>{{.Panel.Bluesky.Err}}</code></p>
+  {{else if not .Panel.Bluesky.Posts}}
+    <p class="muted">no recent posts.</p>
+  {{else}}
+    {{range .Panel.Bluesky.Posts}}
+      <p class="redactable bsky-post">{{.Text}}<br><span class="muted">{{.IndexedAt.Format "2006-01-02 15:04"}}</span></p>
+    {{end}}
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>reddit unread</h2>
+  {{if not .Panel.Reddit.Enabled}}
+    <p class="muted">Set <code>REDDIT_INBOX_RSS</code> (the per-user private URL) in the daemon env.</p>
+  {{else if .Panel.Reddit.Err}}
+    <p class="muted">reddit error: <code>{{.Panel.Reddit.Err}}</code></p>
+  {{else if not .Panel.Reddit.Items}}
+    <p class="muted">no unread.</p>
+  {{else}}
+    {{range .Panel.Reddit.Items}}
+      <p class="redactable"><a href="{{.Link}}" target="_blank" rel="noopener">{{.Title}}</a><br><span class="muted">{{.Author}} - {{.Updated.Format "2006-01-02 15:04"}}</span></p>
+    {{end}}
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>sirens discord</h2>
+  <p class="muted">recent-messages fetch lands when the Discord bot scope is set. For now, deep-link out:</p>
+  <p><a class="tap accent" href="https://discord.com/channels/@me" target="_blank" rel="noopener">open discord</a></p>
+</section>
+
+<p><a class="tap" href="/">back</a></p>
+{{end}}
