@@ -93,3 +93,23 @@ a { color: var(--accent); }
   filter: none;
   user-select: text;
 }
+
+/* Denials table for the allowlist-gap panel. One of the few panels
+   where a table is structurally required. */
+.denials {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.denials th, .denials td {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--card-border);
+  vertical-align: top;
+}
+.denials th { color: var(--muted); font-weight: normal; }
+.denials code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  word-break: break-all;
+}

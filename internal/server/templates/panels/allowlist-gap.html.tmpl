@@ -1,0 +1,29 @@
+{{template "base" .}}
+{{define "title"}}allowlist gaps - personal-dashboard{{end}}
+{{define "main"}}
+<header>
+  <h1>coily allowlist gaps</h1>
+  <p class="muted">commands the lockdown rejected. each is a candidate for <code>.coily/coily.yaml</code>.</p>
+</header>
+{{if not .Panel.Rows}}
+<section class="card">
+  <p class="muted">no denials in the window. either the lockdown is letting everything through or you've been good.</p>
+</section>
+{{else}}
+<section class="card">
+  <table class="denials">
+    <thead><tr><th>when</th><th>verb</th><th>reason</th></tr></thead>
+    <tbody>
+      {{range .Panel.Rows}}
+      <tr>
+        <td class="muted">{{.RelTime}}</td>
+        <td><code>{{.Verb}}</code></td>
+        <td>{{.Error}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}
+<p><a class="tap" href="/">back</a></p>
+{{end}}

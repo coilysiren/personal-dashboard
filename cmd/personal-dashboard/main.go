@@ -24,6 +24,7 @@ func main() {
 	srv := server.New(logger, server.Config{
 		ElevenLabsAPIKey:  os.Getenv("ELEVENLABS_API_KEY"),
 		ElevenLabsVoiceID: os.Getenv("ELEVENLABS_VOICE_ID"),
+		CoilyAuditDir:     os.Getenv("COILY_AUDIT_DIR"),
 	})
 
 	httpSrv := &http.Server{

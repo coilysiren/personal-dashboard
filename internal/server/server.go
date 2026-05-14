@@ -7,12 +7,15 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/coilysiren/personal-dashboard/internal/session"
+	"github.com/coilysiren/personal-dashboard/internal/sources/coilyaudit"
 	"github.com/coilysiren/personal-dashboard/internal/voice"
 )
 
-//go:embed templates/*.html.tmpl
+//go:embed templates/*.html.tmpl templates/panels/*.html.tmpl
 var templateFS embed.FS
 
 //go:embed static
@@ -23,10 +26,11 @@ type ctxKey int
 const sessionIDKey ctxKey = 1
 
 type Server struct {
-	logger    *slog.Logger
-	templates *template.Template
-	sessions  *session.Store
-	voice     *voice.Client
+	logger     *slog.Logger
+	templates  *template.Template
+	sessions   *session.Store
+	voice      *voice.Client
+	coilyAudit *coilyaudit.Source
 }
 
 // PageData is the template payload every route renders against.
@@ -38,23 +42,35 @@ type PageData struct {
 }
 
 // Config is what New takes. Zero values are usable: missing voice creds
-// leave the voice client disabled, no crash.
+// leave the voice client disabled, no crash. Empty CoilyAuditDir falls
+// back to ~/.coily/audit.
 type Config struct {
 	ElevenLabsAPIKey  string
 	ElevenLabsVoiceID string
+	CoilyAuditDir     string
 }
 
 func New(logger *slog.Logger, cfg Config) *Server {
-	tmpl := template.Must(template.ParseFS(templateFS, "templates/*.html.tmpl"))
+	tmpl := template.Must(template.ParseFS(templateFS,
+		"templates/*.html.tmpl",
+		"templates/panels/*.html.tmpl",
+	))
 	v := voice.New(cfg.ElevenLabsAPIKey, cfg.ElevenLabsVoiceID)
 	if !v.Enabled() {
 		logger.Warn("voice disabled: missing ELEVENLABS_API_KEY or ELEVENLABS_VOICE_ID")
 	}
+	var audit *coilyaudit.Source
+	if cfg.CoilyAuditDir != "" {
+		audit = coilyaudit.NewWithDir(cfg.CoilyAuditDir)
+	} else {
+		audit = coilyaudit.New()
+	}
 	return &Server{
-		logger:    logger,
-		templates: tmpl,
-		sessions:  session.NewStore(),
-		voice:     v,
+		logger:     logger,
+		templates:  tmpl,
+		sessions:   session.NewStore(),
+		voice:      v,
+		coilyAudit: audit,
 	}
 }
 
@@ -69,6 +85,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /reveal", s.handleReveal)
 	mux.HandleFunc("POST /hide", s.handleHide)
 	mux.HandleFunc("POST /api/voice/say", s.handleVoiceSay)
+	mux.HandleFunc("GET /panels/allowlist-gap", s.handleAllowlistGap)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -158,6 +175,86 @@ func (s *Server) handleHide(w http.ResponseWriter, r *http.Request) {
 	}
 	s.sessions.Hide(sessionID(r), route)
 	http.Redirect(w, r, redirectTarget(r), http.StatusSeeOther)
+}
+
+// allowlistGapRow is the per-row payload for the allowlist-gap panel.
+type allowlistGapRow struct {
+	Verb    string
+	Argv    string
+	Error   string
+	RelTime string
+}
+
+type allowlistGapData struct {
+	PageData
+	Panel struct {
+		Rows []allowlistGapRow
+	}
+}
+
+func (s *Server) handleAllowlistGap(w http.ResponseWriter, r *http.Request) {
+	const route = "/panels/allowlist-gap"
+	rows, err := s.coilyAudit.Denials(time.Now().Add(-7*24*time.Hour), 50)
+	if err != nil {
+		s.logger.Error("read coily denials failed", "err", err)
+		http.Error(w, "audit read failed", http.StatusInternalServerError)
+		return
+	}
+	data := allowlistGapData{
+		PageData: PageData{
+			Route:    route,
+			Revealed: s.sessions.IsRevealed(sessionID(r), route),
+		},
+	}
+	for _, row := range rows {
+		data.Panel.Rows = append(data.Panel.Rows, allowlistGapRow{
+			Verb:    row.Verb,
+			Argv:    strings.Join(row.Argv, " "),
+			Error:   firstLine(row.Error),
+			RelTime: humanizeRel(row.Time),
+		})
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.templates.ExecuteTemplate(w, "allowlist-gap.html.tmpl", data); err != nil {
+		s.logger.Error("render allowlist-gap failed", "err", err)
+		http.Error(w, "render error", http.StatusInternalServerError)
+	}
+}
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+func humanizeRel(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmtInt(int(d.Minutes())) + "m ago"
+	case d < 24*time.Hour:
+		return fmtInt(int(d.Hours())) + "h ago"
+	default:
+		return fmtInt(int(d.Hours()/24)) + "d ago"
+	}
+}
+
+func fmtInt(i int) string {
+	if i < 0 {
+		return "0"
+	}
+	if i == 0 {
+		return "0"
+	}
+	var b []byte
+	for i > 0 {
+		b = append([]byte{byte('0' + i%10)}, b...)
+		i /= 10
+	}
+	return string(b)
 }
 
 // handleVoiceSay synthesizes audio for the "text" form value and streams
