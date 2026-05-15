@@ -70,35 +70,36 @@ jobs:
     env:
       TAG: ${{ needs.release.outputs.tag }}
     steps:
-      - name: Compute tarball sha256
-        id: sha
-        env:
-          TAG: ${{ needs.release.outputs.tag }}
+      - name: Check out the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - name: Resolve commit SHA at the release tag
+        id: rev
         run: |
           set -euo pipefail
-          url="https://github.com/coilysiren/personal-dashboard/archive/refs/tags/${TAG}.tar.gz"
-          for i in 1 2 3 4 5; do
-            if sha=$(curl -fsSL "$url" | shasum -a 256 | cut -d' ' -f1); then
-              break
-            fi
-            sleep 5
-          done
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          revision=$(git rev-parse HEAD)
+          url="https://github.com/coilysiren/personal-dashboard.git"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch bump to homebrew-tap
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           TAG: ${{ needs.release.outputs.tag }}
-          NEW_URL: ${{ steps.sha.outputs.url }}
-          NEW_SHA: ${{ steps.sha.outputs.sha }}
+          NEW_URL: ${{ steps.rev.outputs.url }}
+          NEW_REVISION: ${{ steps.rev.outputs.revision }}
+        # Tap rewrites Formula/personal-dashboard.rb to brew's git URL
+        # strategy (url+tag+revision), avoiding GitHub's
+        # anonymous-archive rate-limit bucket. See homebrew-tap#26.
         run: |
           set -euo pipefail
           gh api -X POST repos/coilysiren/homebrew-tap/dispatches \
             -f event_type=bump-personal-dashboard \
             -f "client_payload[tag]=${TAG}" \
             -f "client_payload[url]=${NEW_URL}" \
-            -f "client_payload[sha]=${NEW_SHA}"
+            -f "client_payload[revision]=${NEW_REVISION}"
 
   deploy-kai-server:
     needs: [release, bump-tap]
