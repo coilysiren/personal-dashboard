@@ -1,7 +1,7 @@
 class PersonalDashboard < Formula
   desc "Phone-first personal dashboard daemon. Tailnet-only on kai-server"
   homepage "https://github.com/coilysiren/personal-dashboard"
-  url "https://github.com/coilysiren/personal-dashboard.git", tag: "v0.2.7", revision: "4dbdded2bfb7db409a4f3d52ee5d9dda707c37c1"
+  url "git@github.com:coilysiren/personal-dashboard.git", tag: "v0.2.7", revision: "4dbdded2bfb7db409a4f3d52ee5d9dda707c37c1"
   license "MIT"
   head "https://github.com/coilysiren/personal-dashboard.git", branch: "main"
 
