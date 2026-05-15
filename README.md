@@ -18,12 +18,12 @@ Inspired by [danielmiessler/Personal_AI_Infrastructure](https://github.com/danie
 Three git sources:
 
 1. `coilysiren/personal-dashboard` (this repo) - code only.
-2. `coilysiren/coilyco-ai` - skills, `.coily/coily.yaml`, daily-* routine outputs.
+2. `coilysiren/agentic-os-kai` - skills, `.coily/coily.yaml`, daily-* routine outputs.
 3. `coilysiren/coilyco-vault` (private) - Obsidian inbox markdown.
 
 Runtime sources (polled at request time, not committed): `~/.repo-recall/`, Sentry, Grafana / Tempo, Phoenix, Bluesky, Sirens Discord, Reddit, Steam, Hue, Sonos, Cast, ElevenLabs.
 
-Local dashboard state at `~/.personal-dashboard/state/` on kai-server. Never written back to vault or coilyco-ai.
+Local dashboard state at `~/.personal-dashboard/state/` on kai-server. Never written back to vault or agentic-os-kai.
 
 ## Layout
 

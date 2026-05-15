@@ -1,18 +1,18 @@
 // Package catalog joins the static cross-repo dependency graph from
-// coilyco-ai/data/catalog-graph.yaml with the live repo signals served
+// agentic-os-kai/data/catalog-graph.yaml with the live repo signals served
 // by repo-recall, producing a single payload the catalog panel
 // renders.
 //
-// The yaml is built by `coily exec build-catalog-graph` in coilyco-ai
+// The yaml is built by `coily exec build-catalog-graph` in agentic-os-kai
 // from each repo's `.coily/coily.yaml` catalog block. Repo-recall's
 // dashboard JSON view supplies the live overlay (ci_status, open_issues,
 // action_signals, deploy state, activity score). All GitHub data
 // reaches this source through repo-recall, never via bare gh.
 //
 // Config:
-//   - PERSONAL_DASHBOARD_COILYCO_AI_PATH: base dir of the coilyco-ai
+//   - PERSONAL_DASHBOARD_COILYCO_AI_PATH: base dir of the agentic-os-kai
 //     checkout. The source reads data/catalog-graph.yaml underneath.
-//     Default /home/kai/projects/coilysiren/coilyco-ai.
+//     Default /home/kai/projects/coilysiren/agentic-os-kai.
 //   - REPO_RECALL_URL: base of the repo-recall HTTP API. Default
 //     http://127.0.0.1:7777 (same host on kai-server).
 //
@@ -46,7 +46,7 @@ type Source struct {
 // rather than erroring when the underlying file/endpoint is missing.
 func New(coilycoAIPath, repoRecallURL string) *Source {
 	if coilycoAIPath == "" {
-		coilycoAIPath = "/home/kai/projects/coilysiren/coilyco-ai"
+		coilycoAIPath = "/home/kai/projects/coilysiren/agentic-os-kai"
 	}
 	if repoRecallURL == "" {
 		repoRecallURL = "http://127.0.0.1:7777"

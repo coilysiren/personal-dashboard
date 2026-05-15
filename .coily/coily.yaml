@@ -31,7 +31,7 @@ commands:
     description: Tidy go.mod and go.sum.
 
 # Catalog metadata for the cross-repo knowledge graph.
-# Schema: coilysiren/coilyco-ai#420 (tracker).
+# Schema: coilysiren/agentic-os-kai#420 (tracker).
 catalog:
   kind: Component
   type: service
@@ -40,7 +40,7 @@ catalog:
   lifecycle: experimental
   description: "Phone-first Pulse-style personal dashboard. Tailscale-only daemon on kai-server. Reads daily-* routine outputs, vault inbox, repo-recall, Sentry, Grafana, Phoenix, Bluesky, Discord, Reddit, Steam, Hue, Sonos, Cast. Writes through the coily web-ops MCP."
   dependsOn:
-    - coilysiren/coilyco-ai
+    - coilysiren/agentic-os-kai
     - coilysiren/infrastructure
     - coilysiren/otel-a2a-relay
     - coilysiren/repo-recall

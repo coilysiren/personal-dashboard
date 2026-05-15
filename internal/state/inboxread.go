@@ -1,7 +1,7 @@
 // Package state holds dashboard-local read-state (panel preferences,
 // inbox-item read flags). Lives on the host filesystem under
 // ~/.personal-dashboard/state/ so the dashboard never writes back to
-// the vault or to coilyco-ai.
+// the vault or to agentic-os-kai.
 package state
 
 import (

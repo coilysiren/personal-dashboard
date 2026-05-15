@@ -2,7 +2,7 @@
 {{define "main"}}
 <header>
   <h1>catalog</h1>
-  <p class="muted">cross-repo dependency graph from <code>coilyco-ai/data/catalog-graph.yaml</code>, overlaid with live signals from repo-recall.</p>
+  <p class="muted">cross-repo dependency graph from <code>agentic-os-kai/data/catalog-graph.yaml</code>, overlaid with live signals from repo-recall.</p>
 </header>
 
 {{with .Panel.Catalog}}
@@ -10,7 +10,7 @@
 <section class="card">
   <h2>yaml error</h2>
   <p class="muted"><code>{{.YamlErr}}</code></p>
-  <p class="muted">graph path: <code>{{.GraphPath}}</code>. Run <code>coily exec build-catalog-graph</code> in coilyco-ai to regenerate.</p>
+  <p class="muted">graph path: <code>{{.GraphPath}}</code>. Run <code>coily exec build-catalog-graph</code> in agentic-os-kai to regenerate.</p>
 </section>
 {{else}}
 
@@ -87,7 +87,7 @@
 
 <section class="card">
   <h2>refresh</h2>
-  <p class="muted">graph regenerates from <code>coily exec build-catalog-graph</code> in coilyco-ai. live overlay refreshes from repo-recall's scan (default every 5m).</p>
+  <p class="muted">graph regenerates from <code>coily exec build-catalog-graph</code> in agentic-os-kai. live overlay refreshes from repo-recall's scan (default every 5m).</p>
   <p class="row">
     <a class="tap" href="/panels/catalog">reload panel</a>
     <a class="tap" href="/api/catalog">json</a>
