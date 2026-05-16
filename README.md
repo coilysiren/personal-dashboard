@@ -50,3 +50,11 @@ Direct `go` invocations are denied by the coily lockdown. Add verbs to `.coily/c
 ## Status
 
 Tracked under [#36 umbrella](https://github.com/coilysiren/personal-dashboard/issues/36). Bootstrap (#37) ships the scaffold and a hello-world daemon. Panels and infrastructure roll in via #38 through #48.
+
+## See also
+
+- [AGENTS.md](AGENTS.md) - agent-facing operating rules.
+- [docs/FEATURES.md](docs/FEATURES.md) - inventory of what ships today.
+- [.coily/coily.yaml](.coily/coily.yaml) - allowlisted commands.
+
+Cross-reference convention from [coilysiren/agentic-os#59](https://github.com/coilysiren/agentic-os/issues/59).
