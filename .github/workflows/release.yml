@@ -1,33 +1,17 @@
 name: release
 
-# Tag-only release on every push to main. Mirrors
-# coilysiren/repo-recall/.github/workflows/release.yml.
+# Tag-only release on every push to main. Conventional commits drive the
+# semver bump. Tag is created at the pushed commit, GH Release is cut
+# with the auto-generated changelog, then bump-formula rewrites the
+# Formula's url+tag+revision line via the Contents API (web-flow signed,
+# satisfies the signed-commits ruleset).
 #
-# 1. Every commit triggers at least a patch bump. Conventional-commit
-#    subjects bump higher:
-#      <plain>    -> patch       fix: ...     -> patch
-#      feat: ...  -> minor       feat!: ...   -> major  (also BREAKING CHANGE:)
-# 2. Tag is created at the pushed commit. No commit is written back to main.
-# 3. A GitHub Release is cut with the auto-generated changelog.
-# 4. The new tarball sha256 is computed, then a repository_dispatch is
-#    fired to coilysiren/homebrew-tap whose own bump-personal-dashboard
-#    workflow rewrites Formula/personal-dashboard.rb via the Contents
-#    API. The receiver lives in homebrew-tap so the commit is signed by
-#    GitHub's web-flow key (only installation-token API commits are
-#    auto-signed) and clears the signed-commits ruleset.
+# Brew install path is direct-repo (no aggregator tap):
+#   brew tap coilysiren/personal-dashboard https://github.com/coilysiren/personal-dashboard
+#   brew install coilysiren/personal-dashboard/personal-dashboard
 #
-# Formula/personal-dashboard.rb in this repo is the source of truth.
-# bump-personal-dashboard fetches it at the release tag, sed-patches url
-# + sha256, and PUTs the result to the tap.
-#
-# All interpolations below are repo-controlled (action outputs, job
-# needs, secrets). No github.event.* untrusted input flows into run
-# blocks.
-#
-# Manual setup (one-time, requires Kai):
-#   gh secret set HOMEBREW_TAP_TOKEN --repo coilysiren/personal-dashboard
-#     value: a fine-grained PAT scoped to coilysiren/homebrew-tap with
-#            Repository permissions -> Contents: Read and write
+# All ${{ }} interpolations are repo-controlled - no github.event.*
+# untrusted input flows into a run block.
 
 on:
   push:
@@ -63,12 +47,21 @@ jobs:
           name: ${{ steps.tag.outputs.new_tag }}
           body: ${{ steps.tag.outputs.changelog }}
 
-  bump-tap:
+  bump-formula:
+    # Rewrite Formula/personal-dashboard.rb's url line to point at the
+    # just-cut tag + revision. Brew reads the formula from the tap clone
+    # (latest main), so the rewrite has to land back here. Commit message
+    # carries the skip-CI marker so this push doesn't re-trigger the
+    # release workflow.
     needs: release
     if: ${{ needs.release.outputs.tag != '' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       TAG: ${{ needs.release.outputs.tag }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Check out the release tag
         uses: actions/checkout@v4
@@ -80,55 +73,56 @@ jobs:
         run: |
           set -euo pipefail
           revision=$(git rev-parse HEAD)
-          url="ssh://git@github.com/coilysiren/personal-dashboard.git"
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch bump to homebrew-tap
+      - name: Rewrite Formula url via Contents API
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          TAG: ${{ needs.release.outputs.tag }}
-          NEW_URL: ${{ steps.rev.outputs.url }}
           NEW_REVISION: ${{ steps.rev.outputs.revision }}
-        # Tap rewrites Formula/personal-dashboard.rb to brew's git URL
-        # strategy (url+tag+revision), avoiding GitHub's
-        # anonymous-archive rate-limit bucket. See homebrew-tap#26.
         run: |
           set -euo pipefail
-          gh api -X POST repos/coilysiren/homebrew-tap/dispatches \
-            -f event_type=bump-personal-dashboard \
-            -f "client_payload[tag]=${TAG}" \
-            -f "client_payload[url]=${NEW_URL}" \
-            -f "client_payload[revision]=${NEW_REVISION}"
+          path=Formula/personal-dashboard.rb
+          tmp=$(mktemp -d)
+          curl -fsSL \
+            "https://raw.githubusercontent.com/${REPO}/main/${path}" \
+            > "$tmp/personal-dashboard.rb"
+          new_line="  url \"ssh://git@github.com/${REPO}.git\", tag: \"${TAG}\", revision: \"${NEW_REVISION}\""
+          sed -i "s|^  url \".*|${new_line}|" "$tmp/personal-dashboard.rb"
+          cur_sha=$(gh api "repos/${REPO}/contents/${path}?ref=main" --jq .sha)
+          new_b64=$(base64 -w0 < "$tmp/personal-dashboard.rb")
+          gh api -X PUT "repos/${REPO}/contents/${path}" \
+            -f message="chore(formula): bump to ${TAG} [skip ci]" \
+            -f content="$new_b64" \
+            -f sha="$cur_sha" \
+            -f branch=main
 
   deploy-kai-server:
-    needs: [release, bump-tap]
+    needs: [release, bump-formula]
     if: ${{ needs.release.outputs.tag != '' }}
     runs-on: ubuntu-latest
     env:
       TAG: ${{ needs.release.outputs.tag }}
+      REPO: ${{ github.repository }}
     steps:
-      - name: Wait for tap to carry the new tag
+      - name: Wait for local Formula to carry the new tag
         env:
-          TAG: ${{ needs.release.outputs.tag }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # bump-personal-dashboard runs in homebrew-tap and PUTs the
-        # Formula via Contents API. Poll the Contents API (not the raw
-        # CDN, which caches aggressively for 5+ min) until the file
-        # carries the new tag. Capped at ~3 min.
+        # bump-formula PUTs the Formula via Contents API on this repo's
+        # main. Poll the Contents API (not the raw CDN, which caches
+        # aggressively for 5+ min) until the file carries the new tag.
+        # Capped at ~3 min.
         run: |
           set -euo pipefail
           path=Formula/personal-dashboard.rb
           for i in $(seq 1 18); do
-            content=$(gh api "repos/coilysiren/homebrew-tap/contents/${path}" --jq .content | base64 -d || true)
-            if grep -q "/${TAG}.tar.gz\"" <<< "$content"; then
-              echo "tap carries $TAG"
+            content=$(gh api "repos/${REPO}/contents/${path}" --jq .content | base64 -d || true)
+            if grep -q "tag: \"${TAG}\"" <<< "$content"; then
+              echo "formula carries $TAG"
               exit 0
             fi
-            echo "waiting for tap bump (attempt $i)..."
+            echo "waiting for formula bump (attempt $i)..."
             sleep 10
           done
-          echo "tap never landed $TAG; aborting"
+          echo "formula never landed $TAG; aborting"
           exit 1
 
       - name: Join tailnet

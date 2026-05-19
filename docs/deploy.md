@@ -18,14 +18,14 @@ bash /home/kai/projects/coilysiren/infrastructure/scripts/install-personal-dashb
 
 The script idempotently:
 
-1. `brew tap coilysiren/tap`
-2. `brew install` or `brew upgrade coilysiren/tap/personal-dashboard`
+1. `brew tap coilysiren/personal-dashboard https://github.com/coilysiren/personal-dashboard`
+2. `brew install` or `brew upgrade coilysiren/personal-dashboard/personal-dashboard`
 3. `sudo install -m 0644 systemd/personal-dashboard.service /etc/systemd/system/personal-dashboard.service`
 4. `sudo systemctl daemon-reload`
 5. `sudo systemctl enable personal-dashboard.service`
 6. `sudo systemctl restart personal-dashboard.service`
 
-Re-run after every tap release to upgrade.
+Re-run after every release to upgrade.
 
 ## Secrets
 
