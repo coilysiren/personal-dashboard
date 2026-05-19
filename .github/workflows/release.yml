@@ -141,12 +141,13 @@ jobs:
 
       - name: Trigger personal-dashboard-update on kai-server
         # Tailscale SSH handles auth via the tailnet ACL; no keys on the
-        # runner. The unit sudoers entry is NOPASSWD so the bare ssh
-        # exec works under non-TTY. Output of the unit shows up via
-        # journalctl on kai-server; we just need to know the start call
-        # was accepted here.
+        # runner. coily systemctl self-elevates via the broad NOPASSWD
+        # coily sudoers rule (coily#203), so the bare ssh exec works
+        # under non-TTY without a per-unit sudoers carveout. Output of
+        # the unit shows up via journalctl on kai-server; we just need
+        # to know the start call was accepted here.
         run: |
           set -euo pipefail
           ssh -o StrictHostKeyChecking=accept-new kai@kai-server \
-            'sudo systemctl start personal-dashboard-update.service'
+            'coily systemctl start personal-dashboard-update.service'
           echo "triggered personal-dashboard-update.service on kai-server"
